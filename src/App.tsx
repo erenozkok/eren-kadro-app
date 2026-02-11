@@ -11,11 +11,11 @@ import {
   collection,
   doc,
   getDoc,
-  setDoc,
   onSnapshot,
   updateDoc,
   deleteDoc,
   addDoc,
+  setDoc,
 } from "firebase/firestore";
 import {
   Check,
@@ -46,7 +46,7 @@ import {
   TrendingDown,
 } from "lucide-react";
 
-// --- 1. Sabitler ve Ayarlar ---
+// --- 1. Sabitler ve Tipler (Hoisting hatalarını önlemek için en üstte) ---
 interface Day {
   id: string;
   label: string;
@@ -94,7 +94,6 @@ const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 
-// --- 2. Tipler ---
 interface Stats {
   pac: number;
   sho: number;
@@ -129,7 +128,7 @@ interface MatchData {
   createdAt: number;
 }
 
-// --- 3. Yardımcı Fonksiyonlar ---
+// --- 2. Yardımcı Fonksiyonlar ---
 
 const calculateGeneralImpact = (
   stats: any,
@@ -200,7 +199,7 @@ const getPositionColor = (pos: string) => {
   }
 };
 
-// --- 4. Alt Bileşenler (App'den önce tanımlanmalı) ---
+// --- 3. Alt Bileşenler ---
 
 const AppleSlider = ({
   label,
@@ -249,6 +248,69 @@ const PlayerMarker = ({ p, color }: { p: Player; color: string }) => {
   );
 };
 
+const IdentityScreen = ({
+  players,
+  onSelect,
+}: {
+  players: Player[];
+  onSelect: (p: Player) => void;
+}) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const filtered = players.filter((p) =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="min-h-screen bg-[#F2F2F7] flex flex-col items-center justify-center p-4 animate-in fade-in">
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center space-y-2">
+          <div className="w-20 h-20 bg-white rounded-[2rem] shadow-xl flex items-center justify-center mx-auto mb-6 text-blue-600">
+            <User size={40} strokeWidth={1.5} />
+          </div>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight text-center uppercase">
+            Halı Saha Pro
+          </h1>
+          <p className="text-gray-500 font-medium text-center">
+            İsmini seç ve lige katıl.
+          </p>
+        </div>
+        <div className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+            <input
+              type="text"
+              placeholder="İsim ara..."
+              className="w-full bg-white rounded-xl px-4 py-3 text-gray-900 border border-gray-200 outline-none focus:border-blue-500"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="max-h-[50vh] overflow-y-auto">
+            {filtered
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((player) => (
+                <button
+                  key={player.id}
+                  onClick={() => onSelect(player)}
+                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0 group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                      {player.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <span className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                      {player.name}
+                    </span>
+                  </div>
+                  <ChevronRight className="text-gray-300" size={20} />
+                </button>
+              ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PlayerCard = ({
   player,
   isSelf,
@@ -281,7 +343,9 @@ const PlayerCard = ({
   const availableDays = player.availableDays || [];
   const isAvailableAny = availableDays.length > 0;
   const canToggleDays = isSelf || isAdmin;
-  const netBonus = player.goals * 0.1 + player.wins * 0.2 - player.losses * 0.2;
+  const bonusValue =
+    player.goals * 0.1 + player.wins * 0.2 - player.losses * 0.2;
+  const bonusString = bonusValue.toFixed(1);
 
   return (
     <div
@@ -326,36 +390,35 @@ const PlayerCard = ({
                     Sen
                   </span>
                 )}
-                {netBonus !== 0 && (
+                {bonusValue !== 0 && (
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 border ${
-                      netBonus >= 0
+                      bonusValue >= 0
                         ? "text-emerald-600 bg-emerald-50 border-emerald-100"
                         : "text-red-600 bg-red-50 border-red-100"
                     }`}
                   >
-                    {netBonus >= 0 ? (
+                    {bonusValue >= 0 ? (
                       <TrendingUp size={10} />
                     ) : (
                       <TrendingDown size={10} />
                     )}{" "}
-                    {netBonus.toFixed(1)} Puan
+                    {bonusString}
                   </span>
                 )}
               </div>
             </div>
           </div>
         </div>
-
         {isSelf && (
           <div className="mt-4 flex items-center justify-between bg-orange-50/50 p-2 rounded-xl border border-orange-100">
-            <span className="text-[11px] font-bold text-orange-700 ml-2">
-              Attığın Goller
+            <span className="text-xs font-bold text-orange-700 ml-2">
+              Gol Ekle
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onUpdateGoals(player, -1)}
-                className="w-7 h-7 rounded-lg bg-white border border-orange-200 flex items-center justify-center text-orange-600 hover:bg-orange-100"
+                className="w-8 h-8 rounded-lg bg-white border border-orange-200 flex items-center justify-center text-orange-600 hover:bg-orange-100"
               >
                 <Minus size={14} />
               </button>
@@ -364,7 +427,7 @@ const PlayerCard = ({
               </span>
               <button
                 onClick={() => onUpdateGoals(player, 1)}
-                className="w-7 h-7 rounded-lg bg-orange-600 text-white flex items-center justify-center shadow-sm"
+                className="w-8 h-8 rounded-lg bg-orange-600 text-white flex items-center justify-center shadow-md active:scale-95"
               >
                 <Plus size={14} />
               </button>
@@ -459,69 +522,6 @@ const PlayerCard = ({
   );
 };
 
-const IdentityScreen = ({
-  players,
-  onSelect,
-}: {
-  players: Player[];
-  onSelect: (p: Player) => void;
-}) => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const filtered = players.filter((p) =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  return (
-    <div className="min-h-screen bg-[#F2F2F7] flex flex-col items-center justify-center p-4 animate-in fade-in">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-20 h-20 bg-white rounded-[2rem] shadow-xl flex items-center justify-center mx-auto mb-6 text-blue-600">
-            <User size={40} strokeWidth={1.5} />
-          </div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight text-center uppercase">
-            Halı Saha Pro
-          </h1>
-          <p className="text-gray-500 font-medium text-center">
-            İsmini seç ve lige katıl.
-          </p>
-        </div>
-        <div className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-            <input
-              type="text"
-              placeholder="İsim ara..."
-              className="w-full bg-white rounded-xl px-4 py-3 text-gray-900 border border-gray-200 outline-none focus:border-blue-500"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="max-h-[50vh] overflow-y-auto">
-            {filtered
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((player) => (
-                <button
-                  key={player.id}
-                  onClick={() => onSelect(player)}
-                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0 group"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                      {player.name.substring(0, 2).toUpperCase()}
-                    </div>
-                    <span className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
-                      {player.name}
-                    </span>
-                  </div>
-                  <ChevronRight className="text-gray-300" size={20} />
-                </button>
-              ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const Leaderboard = ({ players }: { players: Player[] }) => {
   const [mode, setMode] = useState<"goals" | "overall">("overall");
 
@@ -598,10 +598,6 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
                     className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${
                       idx === 0
                         ? "bg-yellow-400 text-white ring-4 ring-yellow-50"
-                        : idx === 1
-                        ? "bg-gray-400 text-white"
-                        : idx === 2
-                        ? "bg-orange-400 text-white"
                         : "bg-gray-100 text-gray-400"
                     }`}
                   >
@@ -623,9 +619,7 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
                     </div>
                     <div className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
                       {mode === "overall"
-                        ? `Saf: ${baseAvg} | W:${p.wins || 0} L:${
-                            p.losses || 0
-                          } B:${bonus}`
+                        ? `Saf Yetenek: ${baseAvg} | Bonus: ${bonus}`
                         : `${p.goals} Gol`}
                     </div>
                   </div>
@@ -678,13 +672,13 @@ const TacticalPitch = ({ matchData }: { matchData: MatchData }) => {
           <button
             key={opt.id}
             onClick={() => setSelectedOptionId(idx)}
-            className={`snap-start flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black border-2 transition-all ${
+            className={`snap-start flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black border-2 ${
               selectedOptionId === idx
                 ? "bg-blue-600 text-white border-blue-600 shadow-lg"
                 : "bg-white text-gray-500 border-gray-200"
             }`}
           >
-            VARYASYON {idx + 1}
+            VARİASYON {idx + 1}
           </button>
         ))}
       </div>
@@ -920,8 +914,8 @@ export default function App() {
 
     const sortedPool = [...pool].sort(
       (a, b) =>
-        calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses) -
-        calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses)
+        calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses) -
+        calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses)
     );
 
     const assignPos = (team: Player[]) => {
@@ -1087,7 +1081,16 @@ export default function App() {
                   isAdmin={isAdmin}
                   onEdit={(p) => {
                     setEditingPlayer(p);
-                    setEditingStats(p.votes[currentIdentity.id] || p.stats);
+                    setEditingStats(
+                      p.votes[currentIdentity.id] || {
+                        pac: 60,
+                        sho: 60,
+                        pas: 60,
+                        dri: 60,
+                        def: 60,
+                        phy: 60,
+                      }
+                    );
                   }}
                   onToggleDay={handleToggleDay}
                   onDelete={() => {}}
