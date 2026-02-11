@@ -4,7 +4,7 @@ import {
   getAuth,
   signInAnonymously,
   onAuthStateChanged,
-  signInWithCustomToken,
+  User as FirebaseUser,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -31,12 +31,35 @@ import {
   Calendar,
   Star,
   AlertCircle,
-  Shield,
-  Target,
-  Activity,
-  RefreshCw,
   Crown,
 } from "lucide-react";
+
+// --- Types ---
+interface Stats {
+  pac: number;
+  sho: number;
+  pas: number;
+  dri: number;
+  def: number;
+  phy: number;
+}
+
+interface Player {
+  id: string;
+  name: string;
+  isAvailable?: boolean;
+  isGuest: boolean;
+  stats: Stats;
+  votes: Record<string, Stats>;
+  availableDays?: string[];
+  assignedPos?: "DEF" | "ORT" | "FOR";
+}
+
+interface Teams {
+  tA: Player[];
+  tB: Player[];
+  day: string;
+}
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -83,7 +106,7 @@ const DAYS = [
 
 // --- ADVANCED RATING LOGIC ---
 
-const calculatePositionalRatings = (stats) => {
+const calculatePositionalRatings = (stats: Stats) => {
   const { def, phy, pas, dri, sho, pac } = stats;
   const defRating = def * 0.5 + phy * 0.3 + pac * 0.1 + pas * 0.1;
   const midRating = pas * 0.4 + dri * 0.3 + def * 0.15 + sho * 0.15;
@@ -96,21 +119,21 @@ const calculatePositionalRatings = (stats) => {
   };
 };
 
-const getBestPosition = (stats) => {
+const getBestPosition = (stats: Stats) => {
   const ratings = calculatePositionalRatings(stats);
   const max = Math.max(ratings.DEF, ratings.ORT, ratings.FOR);
 
-  if (ratings.DEF === max) return { pos: "DEF", rating: ratings.DEF };
-  if (ratings.FOR === max) return { pos: "FOR", rating: ratings.FOR };
-  return { pos: "ORT", rating: ratings.ORT };
+  if (ratings.DEF === max) return { pos: "DEF" as const, rating: ratings.DEF };
+  if (ratings.FOR === max) return { pos: "FOR" as const, rating: ratings.FOR };
+  return { pos: "ORT" as const, rating: ratings.ORT };
 };
 
-const calculateGeneralImpact = (stats) => {
+const calculateGeneralImpact = (stats: Stats) => {
   const values = Object.values(stats);
   return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
 };
 
-const getPositionColor = (pos) => {
+const getPositionColor = (pos: string) => {
   switch (pos) {
     case "DEF":
       return "text-blue-600 bg-blue-50 border-blue-100";
@@ -125,7 +148,13 @@ const getPositionColor = (pos) => {
 
 // --- Components ---
 
-const IdentityScreen = ({ players, onSelect }) => {
+const IdentityScreen = ({
+  players,
+  onSelect,
+}: {
+  players: Player[];
+  onSelect: (p: Player) => void;
+}) => {
   const [searchTerm, setSearchTerm] = useState("");
 
   const filtered = players.filter((p) =>
@@ -185,7 +214,17 @@ const IdentityScreen = ({ players, onSelect }) => {
   );
 };
 
-const AppleSlider = ({ label, value, subLabel, onChange }) => (
+const AppleSlider = ({
+  label,
+  value,
+  subLabel,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  subLabel?: string;
+  onChange: (v: number) => void;
+}) => (
   <div className="space-y-3">
     <div className="flex justify-between items-end">
       <div className="flex flex-col">
@@ -222,9 +261,17 @@ const PlayerCard = ({
   onEdit,
   onToggleDay,
   onDelete,
+}: {
+  player: Player;
+  isSelf: boolean;
+  isAdmin: boolean;
+  onEdit: (p: Player) => void;
+  onToggleDay: (p: Player, d: string) => void;
+  onDelete: (id: string) => void;
 }) => {
   const { pos: bestPos, rating: bestRating } = getBestPosition(player.stats);
   const availableDays = player.availableDays || [];
+  const isAvailableAny = availableDays.length > 0;
 
   const canToggleDays = isSelf || isAdmin;
   const canEditStats = !isSelf;
@@ -243,7 +290,7 @@ const PlayerCard = ({
     >
       <div
         className={`absolute left-0 top-0 bottom-0 w-1.5 transition-colors duration-300 ${
-          availableDays.length > 0 ? "bg-emerald-500" : "bg-gray-200"
+          isAvailableAny ? "bg-emerald-500" : "bg-gray-200"
         }`}
       />
       <div className="pl-5 pr-4 pt-5 pb-4">
@@ -364,7 +411,7 @@ const PlayerCard = ({
           {canDelete && (
             <button
               onClick={() => onDelete(player.id)}
-              title="Sil"
+              title={player.isGuest ? "Misafiri Sil" : "Kişiyi Gruptan Sil"}
               className={`h-8 px-3 flex items-center justify-center border rounded-lg transition-colors ${
                 player.isGuest
                   ? "bg-white border-gray-200 text-gray-400 hover:text-red-500 hover:bg-red-50"
@@ -380,9 +427,17 @@ const PlayerCard = ({
   );
 };
 
-const TacticalPitch = ({ teamA, teamB, dayName }) => {
-  const groupByPos = (team) => {
-    const groups = { DEF: [], ORT: [], FOR: [] };
+const TacticalPitch = ({
+  teamA,
+  teamB,
+  dayName,
+}: {
+  teamA: Player[];
+  teamB: Player[];
+  dayName: string;
+}) => {
+  const groupByPos = (team: Player[]) => {
+    const groups: Record<string, Player[]> = { DEF: [], ORT: [], FOR: [] };
     team.forEach((p) => {
       const pos = p.assignedPos || getBestPosition(p.stats).pos;
       if (groups[pos]) groups[pos].push(p);
@@ -394,9 +449,18 @@ const TacticalPitch = ({ teamA, teamB, dayName }) => {
   const tAGroups = groupByPos(teamA);
   const tBGroups = groupByPos(teamB);
 
-  const PlayerItem = ({ p, colorClass, isTeamB }) => {
+  const PlayerItem = ({
+    p,
+    colorClass,
+    isTeamB,
+  }: {
+    p: Player;
+    colorClass: string;
+    isTeamB: boolean;
+  }) => {
     const pos = p.assignedPos || getBestPosition(p.stats).pos;
     const ratings = calculatePositionalRatings(p.stats);
+    // @ts-ignore
     const rating = ratings[pos];
     const namePosition = isTeamB
       ? "-top-9 md:-top-10"
@@ -432,7 +496,15 @@ const TacticalPitch = ({ teamA, teamB, dayName }) => {
     );
   };
 
-  const TeamHalf = ({ groups, colorClass, isBottom }) => {
+  const TeamHalf = ({
+    groups,
+    colorClass,
+    isBottom,
+  }: {
+    groups: Record<string, Player[]>;
+    colorClass: string;
+    isBottom: boolean;
+  }) => {
     const rows = isBottom ? ["FOR", "ORT", "DEF"] : ["DEF", "ORT", "FOR"];
 
     return (
@@ -494,22 +566,22 @@ const TacticalPitch = ({ teamA, teamB, dayName }) => {
 
 // --- Main Application ---
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [currentIdentity, setCurrentIdentity] = useState(null);
-  const [players, setPlayers] = useState([]);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [currentIdentity, setCurrentIdentity] = useState<Player | null>(null);
+  const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState("list");
-  const [editingPlayer, setEditingPlayer] = useState(null);
-  const [editingStats, setEditingStats] = useState(null);
+  const [view, setView] = useState<"list" | "match">("list");
+  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
+  const [editingStats, setEditingStats] = useState<Stats | null>(null);
   const [showGuestInput, setShowGuestInput] = useState(false);
   const [guestName, setGuestName] = useState("");
-  const [teams, setTeams] = useState(null);
-  const [selectedMatchDay, setSelectedMatchDay] = useState(null);
-  const [resetStatus, setResetStatus] = useState(null);
+  const [teams, setTeams] = useState<Teams | null>(null);
+  const [selectedMatchDay, setSelectedMatchDay] = useState<string | null>(null);
+  const [resetStatus, setResetStatus] = useState<string | null>(null);
 
   const isAdmin = currentIdentity?.name === "Eren";
 
-  // **TASARIM DÜZELTİCİ**: Tailwind CSS'i otomatik yükle
+  // **OTOMATİK TASARIM YÜKLEYİCİ**
   useEffect(() => {
     if (!document.getElementById("tailwind-cdn")) {
       const script = document.createElement("script");
@@ -520,6 +592,7 @@ export default function App() {
     }
   }, []);
 
+  // Auth Init
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -532,6 +605,7 @@ export default function App() {
     onAuthStateChanged(auth, setUser);
   }, []);
 
+  // Data Sync
   useEffect(() => {
     if (!user) return;
     const playersRef = collection(
@@ -542,10 +616,10 @@ export default function App() {
       "data",
       "players"
     );
-
     const unsub = onSnapshot(playersRef, (snapshot) => {
-      const data = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-
+      const data = snapshot.docs.map(
+        (d) => ({ id: d.id, ...d.data() } as Player)
+      );
       if (data.length === 0) {
         PREDEFINED_PLAYERS.forEach((name) => {
           addDoc(playersRef, {
@@ -569,6 +643,7 @@ export default function App() {
     return () => unsub();
   }, [user]);
 
+  // Weekly Reset
   useEffect(() => {
     const checkReset = async () => {
       if (!user || players.length === 0) return;
@@ -619,9 +694,11 @@ export default function App() {
     checkReset();
   }, [user, players.length > 0]);
 
-  const openEditModal = (player) => {
+  // Handlers
+  const openEditModal = (player: Player) => {
     setEditingPlayer(player);
-    const myVote = player.votes?.[currentIdentity.id];
+    // @ts-ignore
+    const myVote = player.votes?.[currentIdentity?.id];
     setEditingStats(myVote || player.stats);
   };
 
@@ -639,16 +716,23 @@ export default function App() {
     try {
       const playerSnap = await getDoc(playerRef);
       if (!playerSnap.exists()) return;
-      const playerData = playerSnap.data();
+      const playerData = playerSnap.data() as Player;
       const currentVotes = playerData.votes || {};
       currentVotes[currentIdentity.id] = editingStats;
-      const statKeys = ["def", "phy", "pac", "pas", "dri", "sho"];
+      const statKeys: (keyof Stats)[] = [
+        "def",
+        "phy",
+        "pac",
+        "pas",
+        "dri",
+        "sho",
+      ];
       const calculatedStats = { ...playerData.stats };
       if (Object.keys(currentVotes).length > 0) {
         statKeys.forEach((key) => {
           let sum = 0;
           let count = 0;
-          Object.values(currentVotes).forEach((vote) => {
+          Object.values(currentVotes).forEach((vote: any) => {
             if (vote[key] !== undefined) {
               sum += vote[key];
               count++;
@@ -668,7 +752,7 @@ export default function App() {
     }
   };
 
-  const handleToggleDay = async (player, dayId) => {
+  const handleToggleDay = async (player: Player, dayId: string) => {
     const currentDays = player.availableDays || [];
     let newDays = currentDays.includes(dayId)
       ? currentDays.filter((d) => d !== dayId)
@@ -706,7 +790,7 @@ export default function App() {
     setShowGuestInput(false);
   };
 
-  const handleDeletePlayer = async (id) => {
+  const handleDeletePlayer = async (id: string) => {
     if (!confirm("Bu kişiyi silmek istediğine emin misin?")) return;
     try {
       const docRef = doc(
@@ -724,34 +808,6 @@ export default function App() {
     }
   };
 
-  const bestDayStats = useMemo(() => {
-    if (players.length === 0) return null;
-    let counts = {};
-    DAYS.forEach((d) => (counts[d.id] = 0));
-    players.forEach((p) => {
-      if (p.availableDays) {
-        p.availableDays.forEach((day) => {
-          if (counts[day] !== undefined) counts[day]++;
-        });
-      }
-    });
-    let maxDay = null;
-    let maxCount = -1;
-    DAYS.forEach((d) => {
-      if (counts[d.id] > maxCount) {
-        maxCount = counts[d.id];
-        maxDay = d;
-      }
-    });
-    return { day: maxDay, count: maxCount };
-  }, [players]);
-
-  useEffect(() => {
-    if (bestDayStats && !selectedMatchDay) {
-      setSelectedMatchDay(bestDayStats.day.id);
-    }
-  }, [bestDayStats]);
-
   const handleGenerateTeams = () => {
     const targetDay =
       selectedMatchDay || (bestDayStats ? bestDayStats.day.id : "Pzt");
@@ -765,8 +821,8 @@ export default function App() {
       (a, b) =>
         calculateGeneralImpact(b.stats) - calculateGeneralImpact(a.stats)
     );
-    const teamA = [];
-    const teamB = [];
+    const teamA: Player[] = [];
+    const teamB: Player[] = [];
     let scoreA = 0;
     let scoreB = 0;
 
@@ -781,7 +837,7 @@ export default function App() {
       }
     });
 
-    const assignPositions = (team) => {
+    const assignPositions = (team: Player[]) => {
       const withRatings = team.map((p) => ({
         ...p,
         ratings: calculatePositionalRatings(p.stats),
@@ -814,22 +870,22 @@ export default function App() {
       withRatings.sort((a, b) => b.ratings.DEF - a.ratings.DEF);
       const defenders = withRatings
         .slice(0, defCount)
-        .map((p) => ({ ...p, assignedPos: "DEF" }));
+        .map((p) => ({ ...p, assignedPos: "DEF" as const }));
       const remaining1 = withRatings.slice(defCount);
       remaining1.sort((a, b) => b.ratings.FOR - a.ratings.FOR);
       const forwards = remaining1
         .slice(0, forCount)
-        .map((p) => ({ ...p, assignedPos: "FOR" }));
+        .map((p) => ({ ...p, assignedPos: "FOR" as const }));
       const midfielders = remaining1
         .slice(forCount)
-        .map((p) => ({ ...p, assignedPos: "ORT" }));
+        .map((p) => ({ ...p, assignedPos: "ORT" as const }));
       return [...defenders, ...forwards, ...midfielders];
     };
 
     setTeams({
       tA: assignPositions(teamA),
       tB: assignPositions(teamB),
-      day: DAYS.find((d) => d.id === targetDay).full,
+      day: DAYS.find((d) => d.id === targetDay)?.full || "",
     });
   };
 
@@ -1061,37 +1117,49 @@ export default function App() {
                   label="Defans"
                   subLabel="Müdahale & Pozisyon"
                   value={editingStats.def}
-                  onChange={(v) => setEditingStats({ ...editingStats, def: v })}
+                  onChange={(v) =>
+                    setEditingStats({ ...editingStats!, def: v })
+                  }
                 />
                 <AppleSlider
                   label="Fizik"
                   subLabel="İkili Mücadele & Güç"
                   value={editingStats.phy}
-                  onChange={(v) => setEditingStats({ ...editingStats, phy: v })}
+                  onChange={(v) =>
+                    setEditingStats({ ...editingStats!, phy: v })
+                  }
                 />
                 <AppleSlider
                   label="Hız"
                   subLabel="Koşu & Depar"
                   value={editingStats.pac}
-                  onChange={(v) => setEditingStats({ ...editingStats, pac: v })}
+                  onChange={(v) =>
+                    setEditingStats({ ...editingStats!, pac: v })
+                  }
                 />
                 <AppleSlider
                   label="Pas"
                   subLabel="Oyun Kurma"
                   value={editingStats.pas}
-                  onChange={(v) => setEditingStats({ ...editingStats, pas: v })}
+                  onChange={(v) =>
+                    setEditingStats({ ...editingStats!, pas: v })
+                  }
                 />
                 <AppleSlider
                   label="Dripling"
                   subLabel="Top Kontrolü"
                   value={editingStats.dri}
-                  onChange={(v) => setEditingStats({ ...editingStats, dri: v })}
+                  onChange={(v) =>
+                    setEditingStats({ ...editingStats!, dri: v })
+                  }
                 />
                 <AppleSlider
                   label="Şut"
                   subLabel="Bitiricilik"
                   value={editingStats.sho}
-                  onChange={(v) => setEditingStats({ ...editingStats, sho: v })}
+                  onChange={(v) =>
+                    setEditingStats({ ...editingStats!, sho: v })
+                  }
                 />
               </div>
             </div>
