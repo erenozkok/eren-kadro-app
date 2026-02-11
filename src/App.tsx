@@ -91,7 +91,7 @@ interface Player {
   isGuest: boolean;
   stats: Stats;
   votes: Record<string, Stats>;
-  isAvailable: boolean; // Takvim yerine basit boolean
+  isAvailable: boolean;
   assignedPos?: "DEF" | "ORT" | "FOR";
   goals: number;
   wins: number;
@@ -174,7 +174,127 @@ const getPositionColor = (pos: string) => {
   }
 };
 
-// --- 3. Alt Bileşenler ---
+// --- 3. UI Bileşenleri (Referans hatalarını önlemek için hiyerarşik sıra) ---
+
+const PlayerMarker = ({ p }: { p: Player }) => {
+  const overall = calculateGeneralImpact(p.stats, p.goals, p.wins, p.losses);
+  const { pos } = getBestPositionInfo(p.stats, p.goals, p.wins, p.losses);
+  const posColor =
+    p.assignedPos === "DEF"
+      ? "border-blue-500"
+      : p.assignedPos === "FOR"
+      ? "border-orange-500"
+      : "border-emerald-500";
+
+  return (
+    <div className="flex flex-col items-center relative group">
+      <div
+        className={`w-10 h-10 md:w-12 md:h-12 rounded-full bg-white flex items-center justify-center font-black text-[9px] md:text-[10px] border-4 ${posColor} shadow-xl`}
+      >
+        {p.assignedPos || pos}
+      </div>
+      <div className="absolute -bottom-9 bg-gray-900/90 backdrop-blur-md text-white text-[8px] md:text-[9px] font-bold px-1.5 py-1 rounded-lg whitespace-nowrap shadow-xl border border-white/10 z-20">
+        {p.name} <span className="text-yellow-400 ml-1">{overall}</span>
+      </div>
+    </div>
+  );
+};
+
+const TacticalPitch = ({
+  teamA,
+  teamB,
+}: {
+  teamA: Player[];
+  teamB: Player[];
+}) => {
+  const groupByPos = (team: Player[]) => {
+    const groups: Record<string, Player[]> = { DEF: [], ORT: [], FOR: [] };
+    team.forEach((p) => {
+      const pos = p.assignedPos || "ORT";
+      if (groups[pos]) groups[pos].push(p);
+      else groups.ORT.push(p);
+    });
+    return groups;
+  };
+
+  const tAGroups = groupByPos(teamA);
+  const tBGroups = groupByPos(teamB);
+
+  return (
+    <div className="mt-4 rounded-[2.5rem] overflow-hidden bg-emerald-700 shadow-2xl relative w-full h-[650px] md:h-[800px] border-[8px] border-white/10">
+      <div className="absolute inset-0 opacity-10 bg-[size:80px_80px] bg-[linear-gradient(rgba(255,255,255,0.1)_2px,transparent_2px),linear-gradient(90deg,rgba(255,255,255,0.1)_2px,transparent_2px)]"></div>
+      <div className="absolute inset-4 border-2 border-white/20 rounded-[2rem] pointer-events-none"></div>
+      <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-white/20 -translate-y-1/2"></div>
+      <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/20 rounded-full -translate-x-1/2 -translate-y-1/2"></div>
+
+      <div className="absolute inset-0 flex flex-col z-10 py-8 justify-between">
+        <div className="flex flex-col gap-10">
+          <div className="flex justify-evenly px-4">
+            {tAGroups.DEF.map((p) => (
+              <PlayerMarker key={p.id} p={p} />
+            ))}
+          </div>
+          <div className="flex justify-evenly px-4">
+            {tAGroups.ORT.map((p) => (
+              <PlayerMarker key={p.id} p={p} />
+            ))}
+          </div>
+          <div className="flex justify-evenly px-4">
+            {tAGroups.FOR.map((p) => (
+              <PlayerMarker key={p.id} p={p} />
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col-reverse gap-10">
+          <div className="flex justify-evenly px-4">
+            {tBGroups.DEF.map((p) => (
+              <PlayerMarker key={p.id} p={p} />
+            ))}
+          </div>
+          <div className="flex justify-evenly px-4">
+            {tBGroups.ORT.map((p) => (
+              <PlayerMarker key={p.id} p={p} />
+            ))}
+          </div>
+          <div className="flex justify-evenly px-4">
+            {tBGroups.FOR.map((p) => (
+              <PlayerMarker key={p.id} p={p} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const TacticalPitchVariations = ({ matchData }: { matchData: MatchData }) => {
+  const [selectedOptionId, setSelectedOptionId] = useState<number>(0);
+  const currentOption =
+    matchData.options[selectedOptionId] || matchData.options[0];
+
+  if (!currentOption) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex overflow-x-auto gap-2 mb-2 pb-2 px-2 snap-x scrollbar-hide">
+        {matchData.options.map((opt, idx) => (
+          <button
+            key={opt.id}
+            onClick={() => setSelectedOptionId(idx)}
+            className={`snap-start flex-shrink-0 px-5 py-2.5 rounded-xl text-xs font-black border-2 transition-all ${
+              selectedOptionId === idx
+                ? "bg-blue-600 text-white border-blue-600 shadow-lg"
+                : "bg-white text-gray-500 border-gray-200"
+            }`}
+          >
+            VARYASYON {idx + 1}
+          </button>
+        ))}
+      </div>
+      <TacticalPitch teamA={currentOption.tA} teamB={currentOption.tB} />
+    </div>
+  );
+};
 
 const AppleSlider = ({
   label,
@@ -220,22 +340,6 @@ const AppleSlider = ({
   </div>
 );
 
-const PlayerMarker = ({ p, color }: { p: Player; color: string }) => {
-  const overall = calculateGeneralImpact(p.stats, p.goals, p.wins, p.losses);
-  return (
-    <div className="flex flex-col items-center relative group">
-      <div
-        className={`w-10 h-10 md:w-12 md:h-12 rounded-full bg-white flex items-center justify-center font-black text-[9px] md:text-[10px] border-4 ${color} shadow-xl`}
-      >
-        {p.assignedPos || "ORT"}
-      </div>
-      <div className="absolute -bottom-9 bg-gray-900/90 backdrop-blur-md text-white text-[8px] md:text-[9px] font-bold px-1.5 py-1 rounded-lg whitespace-nowrap shadow-xl border border-white/10 z-20">
-        {p.name} <span className="text-yellow-400 ml-1">{overall}</span>
-      </div>
-    </div>
-  );
-};
-
 const IdentityScreen = ({
   players,
   onSelect,
@@ -256,17 +360,11 @@ const IdentityScreen = ({
             <Trophy size={48} strokeWidth={2} />
           </div>
           <div className="space-y-2">
-            <h1 className="text-5xl md:text-7xl font-black text-gray-900 tracking-tighter leading-none animate-bounce uppercase">
+            <h1 className="text-6xl md:text-8xl font-black text-gray-900 tracking-tighter leading-none animate-bounce uppercase">
               İSMİNİ SEÇ
             </h1>
             <p className="text-xl md:text-2xl font-bold text-blue-600 uppercase tracking-widest">
               10-11 Martı Ligi
-            </p>
-          </div>
-          <div className="bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-white/50 shadow-sm">
-            <p className="text-gray-500 font-semibold text-sm">
-              Lige giriş yapmak ve oylama yapmak için listeden kendini bul ve
-              tıkla.
             </p>
           </div>
         </div>
@@ -275,7 +373,7 @@ const IdentityScreen = ({
           <div className="p-5 border-b border-gray-100 bg-gray-50/50">
             <input
               type="text"
-              placeholder="Hızlı isim ara..."
+              placeholder="Kendini listeden bul..."
               className="w-full bg-white rounded-2xl px-5 py-4 text-gray-900 border-2 border-gray-100 outline-none focus:border-blue-500 transition-all font-bold text-lg"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -411,7 +509,6 @@ const PlayerCard = ({
           </div>
         </div>
 
-        {/* GOL GİRİŞİ: Sadece Eren (isAdmin) yapabilir */}
         {isAdmin && (
           <div className="mt-4 flex items-center justify-between bg-orange-50/50 p-2 rounded-xl border border-orange-100">
             <span className="text-[11px] font-bold text-orange-700 ml-2">
@@ -486,22 +583,21 @@ const PlayerCard = ({
           </div>
         )}
 
-        {/* KATILIM DURUMU: Sadece Eren (isAdmin) görebilir */}
         {isAdmin && (
           <button
             onClick={() => onToggleAvailability(player)}
-            className={`mt-4 w-full py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 border-2 ${
+            className={`mt-4 w-full py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-2 border-2 ${
               player.isAvailable
                 ? "bg-emerald-600 text-white border-emerald-600 shadow-lg"
-                : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
+                : "bg-white text-gray-400 border-gray-200"
             }`}
           >
             {player.isAvailable ? (
-              <UserPlus size={16} />
+              <UserPlus size={14} />
             ) : (
-              <UserMinus size={16} />
+              <UserMinus size={14} />
             )}
-            {player.isAvailable ? "KADRODA VAR" : "KADROYA EKLE"}
+            {player.isAvailable ? "MAÇ KADROSUNDA" : "KADROYA EKLE"}
           </button>
         )}
 
@@ -536,7 +632,122 @@ const PlayerCard = ({
   );
 };
 
-// --- 4. Ana Uygulama ---
+const Leaderboard = ({ players }: { players: Player[] }) => {
+  const [mode, setMode] = useState<"goals" | "overall">("overall");
+  const sortedPlayers = useMemo(() => {
+    if (mode === "goals")
+      return [...players]
+        .filter((p) => p.goals > 0)
+        .sort((a, b) => b.goals - a.goals);
+    return [...players].sort(
+      (a, b) =>
+        calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses) -
+        calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses)
+    );
+  }, [players, mode]);
+
+  return (
+    <div className="animate-in fade-in pb-10">
+      <div className="flex bg-white p-1.5 rounded-2xl border border-gray-200 mb-6 shadow-sm">
+        <button
+          onClick={() => setMode("overall")}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+            mode === "overall"
+              ? "bg-gray-900 text-white shadow-lg"
+              : "text-gray-500"
+          }`}
+        >
+          <Zap size={14} /> Overall
+        </button>
+        <button
+          onClick={() => setMode("goals")}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+            mode === "goals"
+              ? "bg-orange-600 text-white shadow-lg"
+              : "text-gray-500"
+          }`}
+        >
+          <Medal size={14} /> Gol Krallığı
+        </button>
+      </div>
+      <div className="space-y-3">
+        {sortedPlayers.length === 0 ? (
+          <div className="text-center py-10 text-gray-400 italic bg-white rounded-3xl border border-dashed">
+            Veri yok.
+          </div>
+        ) : (
+          sortedPlayers.map((p, idx) => {
+            const overall = calculateGeneralImpact(
+              p.stats,
+              p.goals,
+              p.wins,
+              p.losses
+            );
+            const { pos } = getBestPositionInfo(
+              p.stats,
+              p.goals,
+              p.wins,
+              p.losses
+            );
+            const bonusValue = p.goals * 0.1 + p.wins * 0.2 - p.losses * 0.2;
+            return (
+              <div
+                key={p.id}
+                className="bg-white rounded-2xl p-4 flex items-center justify-between border border-gray-100 shadow-sm transition-all hover:translate-x-1"
+              >
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${
+                      idx === 0
+                        ? "bg-yellow-400 text-white ring-4 ring-yellow-50"
+                        : "bg-gray-100 text-gray-400"
+                    }`}
+                  >
+                    {idx + 1}
+                  </div>
+                  <div>
+                    <div className="font-bold text-gray-900 flex items-center gap-2 uppercase tracking-tight">
+                      {p.name}
+                      {idx === 0 &&
+                        (mode === "goals" ? (
+                          <Crown size={14} className="text-orange-500" />
+                        ) : (
+                          <Flame
+                            size={14}
+                            className="text-yellow-500"
+                            fill="currentColor"
+                          />
+                        ))}
+                    </div>
+                    <div className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
+                      {mode === "overall"
+                        ? `Mevki: ${pos} | Bonus: ${bonusValue.toFixed(1)}`
+                        : `${p.goals} Gol`}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div
+                    className={`text-xl font-black ${
+                      mode === "overall" ? "text-blue-600" : "text-orange-600"
+                    }`}
+                  >
+                    {mode === "overall" ? overall : p.goals}
+                    <span className="text-[10px] ml-1 opacity-50 uppercase">
+                      {mode === "overall" ? "Ovr" : "Gol"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+};
+
+// --- 4. Main Application ---
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -764,7 +975,6 @@ export default function App() {
     await setDoc(
       doc(db, "artifacts", appId, "public", "data", "match", "current"),
       {
-        day: "GÜNCEL MAÇ",
         options,
         createdAt: Date.now(),
       }
@@ -775,7 +985,7 @@ export default function App() {
     setConfirmModal({
       show: true,
       title: "Ligi Sıfırla",
-      desc: "TÜM veriler silinecek. Emin misin?",
+      desc: "TÜM oyuncu verileri silinecek. Emin misin?",
       action: async () => {
         const defaultStats = {
           pac: 60,
@@ -895,23 +1105,25 @@ export default function App() {
         )}
 
         {view === "match" && (
-          <div className="animate-in fade-in">
+          <div className="animate-in fade-in pb-10">
             <div className="bg-white rounded-[2rem] p-8 text-center shadow-sm border border-gray-100 mb-8">
               <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6">
                 <Trophy size={32} />
               </div>
               <h2 className="text-2xl font-black mb-4 uppercase tracking-tighter">
-                Kadro Kurulumu
+                Kadro Mühendisi
               </h2>
               <p className="text-xs text-gray-400 font-bold mb-6">
-                Listedeki "KADRODA VAR" işaretli oyuncularla takımlar kurulur.
+                Listede işaretli olan{" "}
+                {players.filter((p) => p.isAvailable).length} oyuncu ile
+                takımlar kurulur.
               </p>
               {isAdmin && (
                 <button
                   onClick={handleGenerateTeams}
-                  className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all uppercase"
+                  className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all uppercase tracking-widest"
                 >
-                  TAKIMLARI OLUŞTUR / YENİLE
+                  TAKIMLARI OLUŞTUR
                 </button>
               )}
             </div>
@@ -1079,149 +1291,3 @@ export default function App() {
     </div>
   );
 }
-
-const Leaderboard = ({ players }: { players: Player[] }) => {
-  const [mode, setMode] = useState<"goals" | "overall">("overall");
-  const sortedPlayers = useMemo(() => {
-    if (mode === "goals")
-      return [...players]
-        .filter((p) => p.goals > 0)
-        .sort((a, b) => b.goals - a.goals);
-    return [...players].sort(
-      (a, b) =>
-        calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses) -
-        calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses)
-    );
-  }, [players, mode]);
-
-  return (
-    <div className="animate-in fade-in pb-10">
-      <div className="flex bg-white p-1.5 rounded-2xl border border-gray-200 mb-6 shadow-sm">
-        <button
-          onClick={() => setMode("overall")}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-            mode === "overall"
-              ? "bg-gray-900 text-white shadow-lg"
-              : "text-gray-500"
-          }`}
-        >
-          <Zap size={14} /> Overall
-        </button>
-        <button
-          onClick={() => setMode("goals")}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-            mode === "goals"
-              ? "bg-orange-600 text-white shadow-lg"
-              : "text-gray-500"
-          }`}
-        >
-          <Medal size={14} /> Gol Krallığı
-        </button>
-      </div>
-      <div className="space-y-3">
-        {sortedPlayers.length === 0 ? (
-          <div className="text-center py-10 text-gray-400 italic bg-white rounded-3xl border border-dashed">
-            Veri yok.
-          </div>
-        ) : (
-          sortedPlayers.map((p, idx) => {
-            const overall = calculateGeneralImpact(
-              p.stats,
-              p.goals,
-              p.wins,
-              p.losses
-            );
-            const { pos } = getBestPositionInfo(
-              p.stats,
-              p.goals,
-              p.wins,
-              p.losses
-            );
-            const bonusValue = p.goals * 0.1 + p.wins * 0.2 - p.losses * 0.2;
-            return (
-              <div
-                key={p.id}
-                className="bg-white rounded-2xl p-4 flex items-center justify-between border border-gray-100 shadow-sm transition-all hover:translate-x-1"
-              >
-                <div className="flex items-center gap-4">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${
-                      idx === 0
-                        ? "bg-yellow-400 text-white ring-4 ring-yellow-50"
-                        : "bg-gray-100 text-gray-400"
-                    }`}
-                  >
-                    {idx + 1}
-                  </div>
-                  <div>
-                    <div className="font-bold text-gray-900 flex items-center gap-2 uppercase tracking-tight">
-                      {p.name}
-                      {idx === 0 &&
-                        (mode === "goals" ? (
-                          <Crown size={14} className="text-orange-500" />
-                        ) : (
-                          <Flame
-                            size={14}
-                            className="text-yellow-500"
-                            fill="currentColor"
-                          />
-                        ))}
-                    </div>
-                    <div className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
-                      {mode === "overall"
-                        ? `Mevki: ${pos} | Bonus: ${bonusValue.toFixed(1)}`
-                        : `${p.goals} Gol`}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div
-                    className={`text-xl font-black ${
-                      mode === "overall" ? "text-blue-600" : "text-orange-600"
-                    }`}
-                  >
-                    {mode === "overall" ? overall : p.goals}
-                    <span className="text-[10px] ml-1 opacity-50 uppercase">
-                      {mode === "overall" ? "Ovr" : "Gol"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
-};
-
-const TacticalPitchVariations = ({ matchData }: { matchData: MatchData }) => {
-  const [selectedOptionId, setSelectedOptionId] = useState<number>(0);
-  const currentOption =
-    matchData.options[selectedOptionId] || matchData.options[0];
-  if (!currentOption) return null;
-  return (
-    <div className="space-y-4">
-      <div className="flex overflow-x-auto gap-2 mb-2 pb-2 px-2 snap-x scrollbar-hide">
-        {matchData.options.map((opt, idx) => (
-          <button
-            key={opt.id}
-            onClick={() => setSelectedOptionId(idx)}
-            className={`snap-start flex-shrink-0 px-5 py-2.5 rounded-xl text-xs font-black border-2 transition-all ${
-              selectedOptionId === idx
-                ? "bg-blue-600 text-white border-blue-600 shadow-lg"
-                : "bg-white text-gray-500 border-gray-200"
-            }`}
-          >
-            VARYASYON {idx + 1}
-          </button>
-        ))}
-      </div>
-      <TacticalPitch
-        teamA={currentOption.tA}
-        teamB={currentOption.tB}
-        dayName="KADRO"
-      />
-    </div>
-  );
-};
