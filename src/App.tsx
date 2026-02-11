@@ -18,7 +18,6 @@ import {
   setDoc,
 } from "firebase/firestore";
 import {
-  Check,
   X,
   Plus,
   Minus,
@@ -31,7 +30,6 @@ import {
   Trash2,
   Calendar,
   Star,
-  AlertCircle,
   RefreshCw,
   Power,
   ShieldAlert,
@@ -40,13 +38,12 @@ import {
   Medal,
   Crown,
   Flame,
-  Shuffle,
-  Award,
   TrendingUp,
   TrendingDown,
+  Award,
 } from "lucide-react";
 
-// --- 1. Sabitler ve Tipler (Referans hatalarını önlemek için en üstte) ---
+// --- 1. Sabitler ve Ayarlar (Hoisting hatalarını önlemek için en üstte) ---
 interface Day {
   id: string;
   label: string;
@@ -94,6 +91,7 @@ const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 
+// --- 2. Tipler ---
 interface Stats {
   pac: number;
   sho: number;
@@ -128,22 +126,7 @@ interface MatchData {
   createdAt: number;
 }
 
-// --- 2. Yardımcı Fonksiyonlar ---
-
-const calculateGeneralImpact = (
-  stats: any,
-  goals: number = 0,
-  wins: number = 0,
-  losses: number = 0
-) => {
-  const values = Object.values(stats || {}) as number[];
-  if (values.length === 0) return 60;
-  const baseAvg = values.reduce((a, b) => a + b, 0) / values.length;
-
-  // Puanlama: Yetenek + (Gol * 0.1) + (W * 0.2) - (L * 0.2)
-  const finalRating = baseAvg + goals * 0.1 + wins * 0.2 - losses * 0.2;
-  return Math.round(Math.min(99, Math.max(40, finalRating)));
-};
+// --- 3. Yardımcı Fonksiyonlar ---
 
 const calculatePositionalRatings = (
   stats: any,
@@ -161,19 +144,18 @@ const calculatePositionalRatings = (
   } = stats || {};
   const bonus = goals * 0.1 + wins * 0.2 - losses * 0.2;
 
-  const defRating = def * 0.5 + phy * 0.3 + pac * 0.1 + pas * 0.1 + bonus * 0.2;
-  const midRating =
-    pas * 0.4 + dri * 0.3 + def * 0.15 + sho * 0.15 + bonus * 0.5;
-  const fwdRating = sho * 0.5 + pac * 0.2 + dri * 0.2 + phy * 0.1 + bonus * 1.0;
+  const defRating = def * 0.5 + phy * 0.3 + pac * 0.1 + pas * 0.1 + bonus;
+  const midRating = pas * 0.4 + dri * 0.3 + def * 0.15 + sho * 0.15 + bonus;
+  const fwdRating = sho * 0.5 + pac * 0.2 + dri * 0.2 + phy * 0.1 + bonus;
 
   return {
-    DEF: Math.round(Math.min(99, defRating)),
-    ORT: Math.round(Math.min(99, midRating)),
-    FOR: Math.round(Math.min(99, fwdRating)),
+    DEF: Math.round(Math.min(99, Math.max(40, defRating))),
+    ORT: Math.round(Math.min(99, Math.max(40, midRating))),
+    FOR: Math.round(Math.min(99, Math.max(40, fwdRating))),
   };
 };
 
-const getBestPosition = (
+const getBestPositionInfo = (
   stats: any,
   goals: number = 0,
   wins: number = 0,
@@ -181,9 +163,21 @@ const getBestPosition = (
 ) => {
   const ratings = calculatePositionalRatings(stats, goals, wins, losses);
   const max = Math.max(ratings.DEF, ratings.ORT, ratings.FOR);
-  if (ratings.DEF === max) return { pos: "DEF", rating: ratings.DEF };
-  if (ratings.FOR === max) return { pos: "FOR", rating: ratings.FOR };
-  return { pos: "ORT", rating: ratings.ORT };
+
+  let pos = "ORT";
+  if (ratings.DEF === max) pos = "DEF";
+  else if (ratings.FOR === max) pos = "FOR";
+
+  return { pos, rating: max };
+};
+
+const calculateGeneralImpact = (
+  stats: any,
+  goals: number = 0,
+  wins: number = 0,
+  losses: number = 0
+) => {
+  return getBestPositionInfo(stats, goals, wins, losses).rating;
 };
 
 const getPositionColor = (pos: string) => {
@@ -199,7 +193,7 @@ const getPositionColor = (pos: string) => {
   }
 };
 
-// --- 3. Alt Bileşenler (Hierarchy Fix) ---
+// --- 4. Alt Bileşenler (Hiyerarşi Fix) ---
 
 const AppleSlider = ({
   label,
@@ -227,7 +221,7 @@ const AppleSlider = ({
       max="99"
       value={value}
       onChange={(e) => onChange(parseInt(e.target.value))}
-      className="w-full h-2 bg-gray-100 rounded-full appearance-none cursor-pointer accent-blue-600"
+      className="w-full h-2 bg-gray-100 rounded-full appearance-none cursor-pointer accent-blue-600 transition-all"
     />
   </div>
 );
@@ -243,6 +237,80 @@ const PlayerMarker = ({ p, color }: { p: Player; color: string }) => {
       </div>
       <div className="absolute -bottom-9 bg-gray-900/90 backdrop-blur-md text-white text-[8px] md:text-[9px] font-bold px-1.5 py-1 rounded-lg whitespace-nowrap shadow-xl border border-white/10 z-20">
         {p.name} <span className="text-yellow-400 ml-1">{overall}</span>
+      </div>
+    </div>
+  );
+};
+
+const IdentityScreen = ({
+  players,
+  onSelect,
+}: {
+  players: Player[];
+  onSelect: (p: Player) => void;
+}) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const filtered = players.filter((p) =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="min-h-screen bg-[#F2F2F7] flex flex-col items-center justify-start pt-12 md:pt-20 p-6 animate-in fade-in">
+      <div className="w-full max-w-md space-y-12">
+        <div className="text-center space-y-6">
+          <div className="w-24 h-24 bg-white rounded-[2.5rem] shadow-2xl flex items-center justify-center mx-auto mb-4 text-blue-600 border-2 border-blue-50">
+            <Trophy size={48} strokeWidth={2} />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-5xl md:text-7xl font-black text-gray-900 tracking-tighter leading-none animate-bounce uppercase">
+              İSMİNİ SEÇ
+            </h1>
+            <p className="text-xl md:text-2xl font-bold text-blue-600 uppercase tracking-widest">
+              10-11 Martı Ligi
+            </p>
+          </div>
+          <div className="bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-white/50 shadow-sm">
+            <p className="text-gray-500 font-semibold text-sm">
+              Lige giriş yapmak ve oylama yapmak için listeden ismini bul.
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-[2rem] shadow-2xl shadow-blue-900/10 border border-gray-100 overflow-hidden">
+          <div className="p-5 border-b border-gray-100 bg-gray-50/50">
+            <input
+              type="text"
+              placeholder="Kendini ara..."
+              className="w-full bg-white rounded-2xl px-5 py-4 text-gray-900 border-2 border-gray-100 outline-none focus:border-blue-500 transition-all font-bold text-lg"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="max-h-[45vh] overflow-y-auto scrollbar-hide">
+            {filtered
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((player) => (
+                <button
+                  key={player.id}
+                  onClick={() => onSelect(player)}
+                  className="w-full px-8 py-5 flex items-center justify-between hover:bg-blue-50 transition-all border-b border-gray-50 last:border-0 group active:scale-[0.98]"
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                      {player.name.substring(0, 1).toUpperCase()}
+                    </div>
+                    <span className="font-black text-gray-900 text-xl tracking-tight group-hover:text-blue-600 transition-colors uppercase">
+                      {player.name}
+                    </span>
+                  </div>
+                  <ChevronRight
+                    className="text-gray-300 group-hover:text-blue-500 transition-all"
+                    size={24}
+                  />
+                </button>
+              ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -271,7 +339,7 @@ const PlayerCard = ({
     delta: number
   ) => void;
 }) => {
-  const { pos: bestPos, rating: bestRating } = getBestPosition(
+  const { pos: bestPos, rating: bestRating } = getBestPositionInfo(
     player.stats,
     player.goals,
     player.wins,
@@ -279,13 +347,8 @@ const PlayerCard = ({
   );
   const availableDays = player.availableDays || [];
   const isAvailableAny = availableDays.length > 0;
-  const canToggleDays = isSelf || isAdmin;
   const bonusValue =
     player.goals * 0.1 + player.wins * 0.2 - player.losses * 0.2;
-  const bonusString = bonusValue.toFixed(1);
-
-  // KRİTİK GÜNCELLEME: Eren herkesin golüne müdahale edebilir (isAdmin || isSelf)
-  const canModifyGoals = isSelf || isAdmin;
 
   return (
     <div
@@ -343,7 +406,7 @@ const PlayerCard = ({
                     ) : (
                       <TrendingDown size={10} />
                     )}{" "}
-                    {bonusString}
+                    {bonusValue.toFixed(1)} Bonus
                   </span>
                 )}
               </div>
@@ -351,11 +414,11 @@ const PlayerCard = ({
           </div>
         </div>
 
-        {/* Gol Kontrolü (Kart sahibi VEYA Eren yapabilir) */}
-        {canModifyGoals && (
+        {/* GOL GİRİŞİ: Sadece Eren (isAdmin) yapabilir */}
+        {isAdmin && (
           <div className="mt-4 flex items-center justify-between bg-orange-50/50 p-2 rounded-xl border border-orange-100">
             <span className="text-[11px] font-bold text-orange-700 ml-2">
-              Gol Sayısı
+              Gol Sayısı (Admin)
             </span>
             <div className="flex items-center gap-2">
               <button
@@ -369,7 +432,7 @@ const PlayerCard = ({
               </span>
               <button
                 onClick={() => onUpdateGoals(player, 1)}
-                className="w-7 h-7 rounded-lg bg-orange-600 text-white flex items-center justify-center shadow-md active:scale-95"
+                className="w-7 h-7 rounded-lg bg-orange-600 text-white flex items-center justify-center shadow-md"
               >
                 <Plus size={14} />
               </button>
@@ -377,7 +440,7 @@ const PlayerCard = ({
           </div>
         )}
 
-        {/* Maç İstatistikleri Kontrolü (Sadece Eren/Admin) */}
+        {/* Maç İstatistikleri (Sadece Eren/Admin) */}
         {isAdmin && (
           <div className="mt-2 space-y-2">
             <div className="flex items-center justify-between bg-blue-50/50 p-2 rounded-xl border border-blue-100">
@@ -427,21 +490,25 @@ const PlayerCard = ({
           </div>
         )}
 
-        <div className="mt-4 flex justify-between gap-1">
-          {DAYS.map((d) => (
-            <button
-              key={d.id}
-              onClick={() => canToggleDays && onToggleDay(player, d.id)}
-              className={`flex-1 h-8 rounded-lg text-[10px] font-bold border transition-all ${
-                availableDays.includes(d.id)
-                  ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                  : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
-              }`}
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
+        {/* TAKVİM: Sadece Eren (isAdmin) görebilir */}
+        {isAdmin && (
+          <div className="mt-4 flex justify-between gap-1 border-t border-gray-50 pt-4">
+            {DAYS.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => onToggleDay(player, d.id)}
+                className={`flex-1 h-8 rounded-lg text-[10px] font-bold border transition-all ${
+                  availableDays.includes(d.id)
+                    ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                    : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="mt-4 flex gap-2 pt-3 border-t border-gray-50">
           {!isSelf && (
             <button
@@ -459,81 +526,6 @@ const PlayerCard = ({
               <Trash2 size={14} />
             </button>
           )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const IdentityScreen = ({
-  players,
-  onSelect,
-}: {
-  players: Player[];
-  onSelect: (p: Player) => void;
-}) => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const filtered = players.filter((p) =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  return (
-    <div className="min-h-screen bg-[#F2F2F7] flex flex-col items-center justify-start pt-12 md:pt-20 p-6 animate-in fade-in">
-      <div className="w-full max-w-md space-y-12">
-        <div className="text-center space-y-6">
-          <div className="w-24 h-24 bg-white rounded-[2.5rem] shadow-2xl flex items-center justify-center mx-auto mb-4 text-blue-600 border-2 border-blue-50">
-            <Trophy size={48} strokeWidth={2} />
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-5xl md:text-7xl font-black text-gray-900 tracking-tighter leading-none animate-bounce">
-              İSMİNİ SEÇ
-            </h1>
-            <p className="text-xl md:text-2xl font-bold text-blue-600 uppercase tracking-widest">
-              10-11 Martı Ligi
-            </p>
-          </div>
-          <div className="bg-gray-100/50 p-4 rounded-2xl border border-gray-200/50">
-            <p className="text-gray-500 font-semibold text-sm">
-              Lige giriş yapmak ve oylama yapmak için listeden kendini bul ve
-              tıkla.
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-[2rem] shadow-2xl shadow-blue-900/10 border border-gray-100 overflow-hidden">
-          <div className="p-5 border-b border-gray-100 bg-gray-50/50">
-            <input
-              type="text"
-              placeholder="Hızlı ara..."
-              className="w-full bg-white rounded-2xl px-5 py-4 text-gray-900 border-2 border-gray-100 outline-none focus:border-blue-500 transition-all font-bold text-lg placeholder-gray-300"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="max-h-[45vh] overflow-y-auto scrollbar-hide">
-            {filtered
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((player) => (
-                <button
-                  key={player.id}
-                  onClick={() => onSelect(player)}
-                  className="w-full px-8 py-5 flex items-center justify-between hover:bg-blue-50 transition-all border-b border-gray-50 last:border-0 group active:scale-[0.98]"
-                >
-                  <div className="flex items-center gap-5">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                      {player.name.substring(0, 1).toUpperCase()}
-                    </div>
-                    <span className="font-black text-gray-900 text-xl tracking-tight group-hover:text-blue-600 transition-colors uppercase">
-                      {player.name}
-                    </span>
-                  </div>
-                  <ChevronRight
-                    className="text-gray-300 group-hover:text-blue-500 translate-x-0 group-hover:translate-x-1 transition-all"
-                    size={24}
-                  />
-                </button>
-              ))}
-          </div>
         </div>
       </div>
     </div>
@@ -595,11 +587,11 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
               p.wins,
               p.losses
             );
-            const baseAvg = Math.round(
-              Object.values(p.stats || {}).reduce(
-                (a: any, b: any) => a + b,
-                0
-              ) / 6
+            const { pos } = getBestPositionInfo(
+              p.stats,
+              p.goals,
+              p.wins,
+              p.losses
             );
             const bonus = (
               p.goals * 0.1 +
@@ -637,7 +629,7 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
                     </div>
                     <div className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
                       {mode === "overall"
-                        ? `Saf: ${baseAvg} | Bonus: ${bonus}`
+                        ? `Mevki: ${pos} | Bonus: ${bonus}`
                         : `${p.goals} Gol`}
                     </div>
                   </div>
@@ -663,44 +655,37 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
   );
 };
 
-const TacticalPitch = ({ matchData }: { matchData: MatchData }) => {
-  const [selectedOptionId, setSelectedOptionId] = useState<number>(0);
-  const currentOption =
-    matchData.options[selectedOptionId] || matchData.options[0];
-
-  if (!currentOption) return null;
-
+const TacticalPitch = ({
+  teamA,
+  teamB,
+  dayName,
+}: {
+  teamA: Player[];
+  teamB: Player[];
+  dayName: string;
+}) => {
   const groupByPos = (team: Player[]) => {
     const groups: Record<string, Player[]> = { DEF: [], ORT: [], FOR: [] };
     team.forEach((p) => {
-      const pos = p.assignedPos || "ORT";
-      if (groups[pos]) groups[pos].push(p);
+      const { pos } = getBestPositionInfo(p.stats, p.goals, p.wins, p.losses);
+      const assigned = p.assignedPos || pos;
+      if (groups[assigned]) groups[assigned].push(p);
       else groups.ORT.push(p);
     });
     return groups;
   };
 
-  const tAGroups = groupByPos(currentOption.tA);
-  const tBGroups = groupByPos(currentOption.tB);
+  const tAGroups = groupByPos(teamA);
+  const tBGroups = groupByPos(teamB);
 
   return (
-    <div className="mt-4 relative max-w-4xl mx-auto pb-10">
-      <div className="flex overflow-x-auto gap-2 mb-6 pb-2 px-2 snap-x scrollbar-hide">
-        {matchData.options.map((opt, idx) => (
-          <button
-            key={opt.id}
-            onClick={() => setSelectedOptionId(idx)}
-            className={`snap-start flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black border-2 transition-all ${
-              selectedOptionId === idx
-                ? "bg-blue-600 text-white border-blue-600 shadow-lg"
-                : "bg-white text-gray-500 border-gray-200"
-            }`}
-          >
-            VARİASYON {idx + 1}
-          </button>
-        ))}
+    <div className="mt-8 relative max-w-4xl mx-auto pb-10">
+      <div className="absolute -top-5 left-0 right-0 text-center z-20">
+        <span className="bg-gray-900 text-white text-[10px] md:text-xs font-bold px-4 py-1.5 rounded-full shadow-xl border-2 border-white/20 uppercase tracking-widest">
+          {dayName} KADROSU
+        </span>
       </div>
-      <div className="rounded-[2.5rem] overflow-hidden bg-emerald-700 shadow-2xl relative w-full h-[650px] border-[8px] border-white/10">
+      <div className="rounded-[2.5rem] overflow-hidden bg-emerald-700 shadow-2xl relative w-full h-[650px] md:h-[800px] border-[8px] border-white/10">
         <div className="absolute inset-0 opacity-10 bg-[size:80px_80px] bg-[linear-gradient(rgba(255,255,255,0.1)_2px,transparent_2px),linear-gradient(90deg,rgba(255,255,255,0.1)_2px,transparent_2px)]"></div>
         <div className="absolute inset-4 border-2 border-white/20 rounded-[2rem] pointer-events-none"></div>
         <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-white/20 -translate-y-1/2"></div>
@@ -747,7 +732,7 @@ const TacticalPitch = ({ matchData }: { matchData: MatchData }) => {
   );
 };
 
-// --- 4. Main Application ---
+// --- 5. Ana Uygulama ---
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -757,11 +742,11 @@ export default function App() {
   const [view, setView] = useState<"list" | "match" | "rank">("list");
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [editingStats, setEditingStats] = useState<Stats | null>(null);
-  const [matchData, setMatchData] = useState<MatchData | null>(null);
   const [selectedMatchDay, setSelectedMatchDay] = useState<string | null>(null);
   const [resetStatus, setResetStatus] = useState<string | null>(null);
   const [showResetMenu, setShowResetMenu] = useState(false);
   const [confirmModal, setConfirmModal] = useState<any>(null);
+  const [teams, setTeams] = useState<any>(null);
 
   const isAdmin = currentIdentity?.name === "Eren";
 
@@ -822,17 +807,6 @@ export default function App() {
           );
         }
         setLoading(false);
-      }
-    );
-    return () => unsub();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const unsub = onSnapshot(
-      doc(db, "artifacts", appId, "public", "data", "match", "current"),
-      (d) => {
-        setMatchData(d.exists() ? (d.data() as MatchData) : null);
       }
     );
     return () => unsub();
@@ -928,16 +902,34 @@ export default function App() {
     setEditingStats(null);
   };
 
-  const handleGenerateTeams = async () => {
-    const targetDay = selectedMatchDay || bestDayStats?.day?.id || "Pzt";
-    const pool = players.filter((p) => p.availableDays?.includes(targetDay));
+  const handleGenerateTeams = () => {
+    const targetDay =
+      selectedMatchDay || (bestDayStats ? bestDayStats.day?.id : "Pzt");
+    const pool = players.filter(
+      (p) => p.availableDays && p.availableDays.includes(targetDay)
+    );
     if (pool.length < 2) return;
 
-    const sortedPool = [...pool].sort(
+    const sortedByGeneral = [...pool].sort(
       (a, b) =>
-        calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses) -
-        calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses)
+        calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses) -
+        calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses)
     );
+    const teamA: Player[] = [];
+    const teamB: Player[] = [];
+    let scoreA = 0;
+    let scoreB = 0;
+
+    sortedByGeneral.forEach((p) => {
+      const impact = calculateGeneralImpact(p.stats, p.goals, p.wins, p.losses);
+      if (scoreA <= scoreB) {
+        teamA.push(p);
+        scoreA += impact;
+      } else {
+        teamB.push(p);
+        scoreB += impact;
+      }
+    });
 
     const assignPos = (team: Player[]) => {
       const sorted = [...team].sort(
@@ -953,25 +945,11 @@ export default function App() {
       });
     };
 
-    const options = [0, 1, 2, 3, 4].map((i) => {
-      const shuffled = [...sortedPool].sort(() => Math.random() - 0.5);
-      const vA: Player[] = [];
-      const vB: Player[] = [];
-      shuffled.forEach((p, idx) => {
-        if (idx % 2 === 0) vA.push(p);
-        else vB.push(p);
-      });
-      return { id: i, tA: assignPos(vA), tB: assignPos(vB) };
+    setTeams({
+      tA: assignPos(teamA),
+      tB: assignPos(teamB),
+      day: DAYS.find((d) => d.id === targetDay)?.full || "??",
     });
-
-    await setDoc(
-      doc(db, "artifacts", appId, "public", "data", "match", "current"),
-      {
-        day: DAYS.find((d) => d.id === targetDay)?.full || "",
-        options,
-        createdAt: Date.now(),
-      }
-    );
   };
 
   const handleResetAllStats = () => {
@@ -1069,7 +1047,7 @@ export default function App() {
       <div className="max-w-2xl mx-auto p-4 md:p-6">
         {view === "list" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in">
-            {bestDayStats && bestDayStats.count > 0 && (
+            {isAdmin && bestDayStats && bestDayStats.count > 0 && (
               <div className="md:col-span-2 mb-2 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2rem] p-6 text-white shadow-xl flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-1 opacity-80">
@@ -1156,9 +1134,13 @@ export default function App() {
               )}
             </div>
 
-            {matchData ? (
+            {teams ? (
               <div className="space-y-6 pb-20">
-                <TacticalPitch matchData={matchData} />
+                <TacticalPitch
+                  teamA={teams.tA}
+                  teamB={teams.tB}
+                  dayName={teams.day}
+                />
               </div>
             ) : (
               <div className="text-center py-20 opacity-20">
