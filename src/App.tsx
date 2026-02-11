@@ -46,7 +46,7 @@ import {
   TrendingDown,
 } from "lucide-react";
 
-// --- 1. Sabitler ve Tipler (Hoisting hatalarını önlemek için en üstte) ---
+// --- 1. Sabitler ve Tipler (Referans hatalarını önlemek için en üstte) ---
 interface Day {
   id: string;
   label: string;
@@ -140,7 +140,7 @@ const calculateGeneralImpact = (
   if (values.length === 0) return 60;
   const baseAvg = values.reduce((a, b) => a + b, 0) / values.length;
 
-  // Formül: Yetenek + (Gol * 0.1) + (Galibiyet * 0.2) - (Mağlubiyet * 0.2)
+  // Puanlama: Yetenek + (Gol * 0.1) + (W * 0.2) - (L * 0.2)
   const finalRating = baseAvg + goals * 0.1 + wins * 0.2 - losses * 0.2;
   return Math.round(Math.min(99, Math.max(40, finalRating)));
 };
@@ -199,7 +199,7 @@ const getPositionColor = (pos: string) => {
   }
 };
 
-// --- 3. Alt Bileşenler ---
+// --- 3. Alt Bileşenler (Hierarchy Fix) ---
 
 const AppleSlider = ({
   label,
@@ -248,69 +248,6 @@ const PlayerMarker = ({ p, color }: { p: Player; color: string }) => {
   );
 };
 
-const IdentityScreen = ({
-  players,
-  onSelect,
-}: {
-  players: Player[];
-  onSelect: (p: Player) => void;
-}) => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const filtered = players.filter((p) =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  return (
-    <div className="min-h-screen bg-[#F2F2F7] flex flex-col items-center justify-center p-4 animate-in fade-in">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-20 h-20 bg-white rounded-[2rem] shadow-xl flex items-center justify-center mx-auto mb-6 text-blue-600">
-            <User size={40} strokeWidth={1.5} />
-          </div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight text-center uppercase">
-            Halı Saha Pro
-          </h1>
-          <p className="text-gray-500 font-medium text-center">
-            İsmini seç ve lige katıl.
-          </p>
-        </div>
-        <div className="bg-white rounded-[1.5rem] shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-            <input
-              type="text"
-              placeholder="İsim ara..."
-              className="w-full bg-white rounded-xl px-4 py-3 text-gray-900 border border-gray-200 outline-none focus:border-blue-500"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="max-h-[50vh] overflow-y-auto">
-            {filtered
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((player) => (
-                <button
-                  key={player.id}
-                  onClick={() => onSelect(player)}
-                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0 group"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                      {player.name.substring(0, 2).toUpperCase()}
-                    </div>
-                    <span className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
-                      {player.name}
-                    </span>
-                  </div>
-                  <ChevronRight className="text-gray-300" size={20} />
-                </button>
-              ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const PlayerCard = ({
   player,
   isSelf,
@@ -347,6 +284,9 @@ const PlayerCard = ({
     player.goals * 0.1 + player.wins * 0.2 - player.losses * 0.2;
   const bonusString = bonusValue.toFixed(1);
 
+  // KRİTİK GÜNCELLEME: Eren herkesin golüne müdahale edebilir (isAdmin || isSelf)
+  const canModifyGoals = isSelf || isAdmin;
+
   return (
     <div
       className={`group relative bg-white rounded-[24px] p-0 shadow-sm border overflow-hidden transition-all ${
@@ -373,7 +313,7 @@ const PlayerCard = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-gray-900 leading-tight">
+                <h3 className="text-lg font-bold text-gray-900 leading-tight uppercase tracking-tight">
                   {player.name}
                 </h3>
                 <span
@@ -410,15 +350,17 @@ const PlayerCard = ({
             </div>
           </div>
         </div>
-        {isSelf && (
+
+        {/* Gol Kontrolü (Kart sahibi VEYA Eren yapabilir) */}
+        {canModifyGoals && (
           <div className="mt-4 flex items-center justify-between bg-orange-50/50 p-2 rounded-xl border border-orange-100">
-            <span className="text-xs font-bold text-orange-700 ml-2">
-              Gol Ekle
+            <span className="text-[11px] font-bold text-orange-700 ml-2">
+              Gol Sayısı
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onUpdateGoals(player, -1)}
-                className="w-8 h-8 rounded-lg bg-white border border-orange-200 flex items-center justify-center text-orange-600 hover:bg-orange-100"
+                className="w-7 h-7 rounded-lg bg-white border border-orange-200 flex items-center justify-center text-orange-600"
               >
                 <Minus size={14} />
               </button>
@@ -427,7 +369,7 @@ const PlayerCard = ({
               </span>
               <button
                 onClick={() => onUpdateGoals(player, 1)}
-                className="w-8 h-8 rounded-lg bg-orange-600 text-white flex items-center justify-center shadow-md active:scale-95"
+                className="w-7 h-7 rounded-lg bg-orange-600 text-white flex items-center justify-center shadow-md active:scale-95"
               >
                 <Plus size={14} />
               </button>
@@ -435,6 +377,7 @@ const PlayerCard = ({
           </div>
         )}
 
+        {/* Maç İstatistikleri Kontrolü (Sadece Eren/Admin) */}
         {isAdmin && (
           <div className="mt-2 space-y-2">
             <div className="flex items-center justify-between bg-blue-50/50 p-2 rounded-xl border border-blue-100">
@@ -516,6 +459,81 @@ const PlayerCard = ({
               <Trash2 size={14} />
             </button>
           )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const IdentityScreen = ({
+  players,
+  onSelect,
+}: {
+  players: Player[];
+  onSelect: (p: Player) => void;
+}) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const filtered = players.filter((p) =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="min-h-screen bg-[#F2F2F7] flex flex-col items-center justify-start pt-12 md:pt-20 p-6 animate-in fade-in">
+      <div className="w-full max-w-md space-y-12">
+        <div className="text-center space-y-6">
+          <div className="w-24 h-24 bg-white rounded-[2.5rem] shadow-2xl flex items-center justify-center mx-auto mb-4 text-blue-600 border-2 border-blue-50">
+            <Trophy size={48} strokeWidth={2} />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-5xl md:text-7xl font-black text-gray-900 tracking-tighter leading-none animate-bounce">
+              İSMİNİ SEÇ
+            </h1>
+            <p className="text-xl md:text-2xl font-bold text-blue-600 uppercase tracking-widest">
+              10-11 Martı Ligi
+            </p>
+          </div>
+          <div className="bg-gray-100/50 p-4 rounded-2xl border border-gray-200/50">
+            <p className="text-gray-500 font-semibold text-sm">
+              Lige giriş yapmak ve oylama yapmak için listeden kendini bul ve
+              tıkla.
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-[2rem] shadow-2xl shadow-blue-900/10 border border-gray-100 overflow-hidden">
+          <div className="p-5 border-b border-gray-100 bg-gray-50/50">
+            <input
+              type="text"
+              placeholder="Hızlı ara..."
+              className="w-full bg-white rounded-2xl px-5 py-4 text-gray-900 border-2 border-gray-100 outline-none focus:border-blue-500 transition-all font-bold text-lg placeholder-gray-300"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="max-h-[45vh] overflow-y-auto scrollbar-hide">
+            {filtered
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((player) => (
+                <button
+                  key={player.id}
+                  onClick={() => onSelect(player)}
+                  className="w-full px-8 py-5 flex items-center justify-between hover:bg-blue-50 transition-all border-b border-gray-50 last:border-0 group active:scale-[0.98]"
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                      {player.name.substring(0, 1).toUpperCase()}
+                    </div>
+                    <span className="font-black text-gray-900 text-xl tracking-tight group-hover:text-blue-600 transition-colors uppercase">
+                      {player.name}
+                    </span>
+                  </div>
+                  <ChevronRight
+                    className="text-gray-300 group-hover:text-blue-500 translate-x-0 group-hover:translate-x-1 transition-all"
+                    size={24}
+                  />
+                </button>
+              ))}
+          </div>
         </div>
       </div>
     </div>
@@ -604,7 +622,7 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
                     {idx + 1}
                   </div>
                   <div>
-                    <div className="font-bold text-gray-900 flex items-center gap-2">
+                    <div className="font-bold text-gray-900 flex items-center gap-2 uppercase tracking-tight">
                       {p.name}
                       {idx === 0 &&
                         (mode === "goals" ? (
@@ -619,7 +637,7 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
                     </div>
                     <div className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
                       {mode === "overall"
-                        ? `Saf Yetenek: ${baseAvg} | Bonus: ${bonus}`
+                        ? `Saf: ${baseAvg} | Bonus: ${bonus}`
                         : `${p.goals} Gol`}
                     </div>
                   </div>
@@ -672,7 +690,7 @@ const TacticalPitch = ({ matchData }: { matchData: MatchData }) => {
           <button
             key={opt.id}
             onClick={() => setSelectedOptionId(idx)}
-            className={`snap-start flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black border-2 ${
+            className={`snap-start flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black border-2 transition-all ${
               selectedOptionId === idx
                 ? "bg-blue-600 text-white border-blue-600 shadow-lg"
                 : "bg-white text-gray-500 border-gray-200"
@@ -729,7 +747,7 @@ const TacticalPitch = ({ matchData }: { matchData: MatchData }) => {
   );
 };
 
-// --- 5. Main Application ---
+// --- 4. Main Application ---
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -748,9 +766,12 @@ export default function App() {
   const isAdmin = currentIdentity?.name === "Eren";
 
   useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://cdn.tailwindcss.com";
-    document.head.appendChild(script);
+    if (!document.getElementById("tailwind-cdn")) {
+      const script = document.createElement("script");
+      script.id = "tailwind-cdn";
+      script.src = "https://cdn.tailwindcss.com";
+      document.head.appendChild(script);
+    }
   }, []);
 
   useEffect(() => {
@@ -997,7 +1018,7 @@ export default function App() {
       <div className="bg-white/80 backdrop-blur-xl sticky top-0 z-40 border-b border-gray-200/60 p-4 flex items-center justify-between shadow-sm">
         <div className="flex flex-col">
           <h1 className="text-xl font-black tracking-tight uppercase">
-            Lig Paneli
+            10-11 Martı
           </h1>
           <p className="text-xs text-blue-600 font-bold uppercase tracking-wider">
             {currentIdentity.name}
@@ -1193,7 +1214,7 @@ export default function App() {
             <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
               <ShieldAlert size={32} />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">
+            <h3 className="text-xl font-bold text-gray-900 mb-2 uppercase">
               {confirmModal.title}
             </h3>
             <p className="text-gray-500 text-sm mb-8 leading-relaxed">
@@ -1221,7 +1242,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-in slide-in-from-bottom-10">
             <div className="flex justify-between items-center mb-8">
-              <h3 className="text-2xl font-black text-gray-900">
+              <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tight">
                 {editingPlayer.name}
               </h3>
               <button
