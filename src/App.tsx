@@ -31,7 +31,6 @@ import {
   Calendar,
   Star,
   AlertCircle,
-  Crown,
 } from "lucide-react";
 
 // --- Types ---
@@ -260,7 +259,6 @@ const AppleSlider = ({
   </div>
 );
 
-// PlayerCard Props düzeltildi: currentIdentity kaldırıldı
 const PlayerCard = ({
   player,
   isSelf,
@@ -650,8 +648,11 @@ export default function App() {
     return () => unsub();
   }, [user]);
 
-  // EN İYİ GÜN HESAPLAMA (useMemo ile) - Bu sıralama hatasını çözer
-  const bestDayStats = useMemo(() => {
+  // FIX: Typed and Safe useMemo for bestDayStats
+  const bestDayStats = useMemo<{
+    day: Day | null;
+    count: number;
+  } | null>(() => {
     if (players.length === 0) return null;
     let counts: Record<string, number> = {};
     DAYS.forEach((d) => (counts[d.id] = 0));
@@ -662,7 +663,7 @@ export default function App() {
         });
       }
     });
-    let maxDay = null;
+    let maxDay: Day | null = null;
     let maxCount = -1;
     DAYS.forEach((d) => {
       if (counts[d.id] > maxCount) {
@@ -724,9 +725,9 @@ export default function App() {
     checkReset();
   }, [user, players.length > 0]);
 
-  // Set default match day
+  // Set default match day - FIX: Safer access
   useEffect(() => {
-    if (bestDayStats && !selectedMatchDay && bestDayStats.day) {
+    if (bestDayStats?.day && !selectedMatchDay) {
       setSelectedMatchDay(bestDayStats.day.id);
     }
   }, [bestDayStats, selectedMatchDay]);
@@ -846,9 +847,8 @@ export default function App() {
   };
 
   const handleGenerateTeams = () => {
-    const targetDay =
-      selectedMatchDay ||
-      (bestDayStats && bestDayStats.day ? bestDayStats.day.id : "Pzt");
+    // FIX: Safer access with optional chaining and fallback
+    const targetDay = selectedMatchDay || bestDayStats?.day?.id || "Pzt";
     const pool = players.filter(
       (p) => p.availableDays && p.availableDays.includes(targetDay)
     );
@@ -1003,6 +1003,7 @@ export default function App() {
           </div>
         )}
 
+        {/* FIX: Safer check for bestDayStats */}
         {bestDayStats && bestDayStats.count > 0 && (
           <div className="mb-6 bg-gradient-to-r from-gray-900 to-gray-800 rounded-[20px] p-5 text-white shadow-xl shadow-gray-900/10 flex items-center justify-between">
             <div>
