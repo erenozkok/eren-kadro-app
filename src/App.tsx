@@ -28,7 +28,6 @@ import {
   User,
   LogOut,
   Trash2,
-  Calendar,
   Star,
   RefreshCw,
   Power,
@@ -41,24 +40,24 @@ import {
   TrendingUp,
   TrendingDown,
   Activity,
+  UserPlus,
+  UserMinus,
 } from "lucide-react";
 
-// --- 1. Sabitler ve Tipler (Hoisting Fix) ---
-interface Day {
-  id: string;
-  label: string;
-  full: string;
-}
+// --- 1. Konfigürasyon ve Tipler ---
+const firebaseConfig = {
+  apiKey: "AIzaSyAkZU7zgEgrWlac1CaXQywAR4kQOLbMuIQ",
+  authDomain: "halisaha-123.firebaseapp.com",
+  projectId: "halisaha-123",
+  storageBucket: "halisaha-123.firebasestorage.app",
+  messagingSenderId: "247952781761",
+  appId: "1:247952781761:web:ab75e61aee0885ae2a7f40",
+};
 
-const DAYS: Day[] = [
-  { id: "Pzt", label: "Pzt", full: "Pazartesi" },
-  { id: "Sal", label: "Sal", full: "Salı" },
-  { id: "Çar", label: "Çar", full: "Çarşamba" },
-  { id: "Per", label: "Per", full: "Perşembe" },
-  { id: "Cum", label: "Cum", full: "Cuma" },
-  { id: "Cmt", label: "Cmt", full: "Cumartesi" },
-  { id: "Paz", label: "Paz", full: "Pazar" },
-];
+const appId = "halisaha-app-v3";
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
 
 const PREDEFINED_PLAYERS = [
   "Berke",
@@ -77,20 +76,6 @@ const PREDEFINED_PLAYERS = [
   "Necmettin",
 ];
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAkZU7zgEgrWlac1CaXQywAR4kQOLbMuIQ",
-  authDomain: "halisaha-123.firebaseapp.com",
-  projectId: "halisaha-123",
-  storageBucket: "halisaha-123.firebasestorage.app",
-  messagingSenderId: "247952781761",
-  appId: "1:247952781761:web:ab75e61aee0885ae2a7f40",
-};
-
-const appId = "halisaha-app-v3";
-const firebaseApp = initializeApp(firebaseConfig);
-const auth = getAuth(firebaseApp);
-const db = getFirestore(firebaseApp);
-
 interface Stats {
   pac: number;
   sho: number;
@@ -106,7 +91,7 @@ interface Player {
   isGuest: boolean;
   stats: Stats;
   votes: Record<string, Stats>;
-  availableDays?: string[];
+  isAvailable: boolean; // Takvim yerine basit boolean
   assignedPos?: "DEF" | "ORT" | "FOR";
   goals: number;
   wins: number;
@@ -120,7 +105,6 @@ interface MatchOption {
 }
 
 interface MatchData {
-  day: string;
   options: MatchOption[];
   createdAt: number;
 }
@@ -162,11 +146,9 @@ const getBestPositionInfo = (
 ) => {
   const ratings = calculatePositionalRatings(stats, goals, wins, losses);
   const max = Math.max(ratings.DEF, ratings.ORT, ratings.FOR);
-
   let pos: "DEF" | "ORT" | "FOR" = "ORT";
   if (ratings.DEF === max) pos = "DEF";
   else if (ratings.FOR === max) pos = "FOR";
-
   return { pos, rating: max };
 };
 
@@ -207,7 +189,9 @@ const AppleSlider = ({
 }) => (
   <div className="space-y-3">
     <div className="flex justify-between items-end">
-      <span className="text-sm font-bold text-gray-700">{label}</span>
+      <span className="text-sm font-bold text-gray-700 uppercase tracking-tight">
+        {label}
+      </span>
       <span
         className={`text-xl font-bold tabular-nums ${
           value >= 85 ? "text-emerald-600" : "text-gray-900"
@@ -219,7 +203,7 @@ const AppleSlider = ({
     {disabled ? (
       <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
         <div
-          className="h-full bg-blue-500 transition-all duration-500"
+          className="h-full bg-blue-500 transition-all duration-700"
           style={{ width: `${((value - 40) / 59) * 100}%` }}
         />
       </div>
@@ -230,11 +214,27 @@ const AppleSlider = ({
         max="99"
         value={value}
         onChange={(e) => onChange(parseInt(e.target.value))}
-        className="w-full h-2 bg-gray-100 rounded-full appearance-none cursor-pointer accent-blue-600 transition-all"
+        className="w-full h-2 bg-gray-100 rounded-full appearance-none cursor-pointer accent-blue-600"
       />
     )}
   </div>
 );
+
+const PlayerMarker = ({ p, color }: { p: Player; color: string }) => {
+  const overall = calculateGeneralImpact(p.stats, p.goals, p.wins, p.losses);
+  return (
+    <div className="flex flex-col items-center relative group">
+      <div
+        className={`w-10 h-10 md:w-12 md:h-12 rounded-full bg-white flex items-center justify-center font-black text-[9px] md:text-[10px] border-4 ${color} shadow-xl`}
+      >
+        {p.assignedPos || "ORT"}
+      </div>
+      <div className="absolute -bottom-9 bg-gray-900/90 backdrop-blur-md text-white text-[8px] md:text-[9px] font-bold px-1.5 py-1 rounded-lg whitespace-nowrap shadow-xl border border-white/10 z-20">
+        {p.name} <span className="text-yellow-400 ml-1">{overall}</span>
+      </div>
+    </div>
+  );
+};
 
 const IdentityScreen = ({
   players,
@@ -265,7 +265,8 @@ const IdentityScreen = ({
           </div>
           <div className="bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-white/50 shadow-sm">
             <p className="text-gray-500 font-semibold text-sm">
-              Lige giriş yapmak ve oylama yapmak için listeden ismini bul.
+              Lige giriş yapmak ve oylama yapmak için listeden kendini bul ve
+              tıkla.
             </p>
           </div>
         </div>
@@ -274,7 +275,7 @@ const IdentityScreen = ({
           <div className="p-5 border-b border-gray-100 bg-gray-50/50">
             <input
               type="text"
-              placeholder="Hızlı ara..."
+              placeholder="Hızlı isim ara..."
               className="w-full bg-white rounded-2xl px-5 py-4 text-gray-900 border-2 border-gray-100 outline-none focus:border-blue-500 transition-all font-bold text-lg"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -315,7 +316,7 @@ const PlayerCard = ({
   isSelf,
   isAdmin,
   onEdit,
-  onToggleDay,
+  onToggleAvailability,
   onDelete,
   onUpdateGoals,
   onUpdateMatchCount,
@@ -324,7 +325,7 @@ const PlayerCard = ({
   isSelf: boolean;
   isAdmin: boolean;
   onEdit: (p: Player) => void;
-  onToggleDay: (p: Player, d: string) => void;
+  onToggleAvailability: (p: Player) => void;
   onDelete: (id: string) => void;
   onUpdateGoals: (p: Player, delta: number) => void;
   onUpdateMatchCount: (
@@ -339,8 +340,6 @@ const PlayerCard = ({
     player.wins,
     player.losses
   );
-  const availableDays = player.availableDays || [];
-  const isAvailableAny = availableDays.length > 0;
   const bonusValue =
     player.goals * 0.1 + player.wins * 0.2 - player.losses * 0.2;
 
@@ -352,11 +351,13 @@ const PlayerCard = ({
           : "border-gray-100"
       }`}
     >
-      <div
-        className={`absolute left-0 top-0 bottom-0 w-1.5 ${
-          isAvailableAny ? "bg-emerald-500" : "bg-gray-200"
-        }`}
-      />
+      {isAdmin && (
+        <div
+          className={`absolute left-0 top-0 bottom-0 w-1.5 ${
+            player.isAvailable ? "bg-emerald-500" : "bg-gray-200"
+          }`}
+        />
+      )}
       <div className="pl-5 pr-4 pt-5 pb-4">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-4">
@@ -410,10 +411,11 @@ const PlayerCard = ({
           </div>
         </div>
 
+        {/* GOL GİRİŞİ: Sadece Eren (isAdmin) yapabilir */}
         {isAdmin && (
           <div className="mt-4 flex items-center justify-between bg-orange-50/50 p-2 rounded-xl border border-orange-100">
             <span className="text-[11px] font-bold text-orange-700 ml-2">
-              Gol Sayısı (Admin)
+              Gol Sayısı
             </span>
             <div className="flex items-center gap-2">
               <button
@@ -484,22 +486,23 @@ const PlayerCard = ({
           </div>
         )}
 
+        {/* KATILIM DURUMU: Sadece Eren (isAdmin) görebilir */}
         {isAdmin && (
-          <div className="mt-4 flex justify-between gap-1 border-t border-gray-50 pt-4">
-            {DAYS.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => onToggleDay(player, d.id)}
-                className={`flex-1 h-8 rounded-lg text-[10px] font-bold border transition-all ${
-                  availableDays.includes(d.id)
-                    ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                    : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => onToggleAvailability(player)}
+            className={`mt-4 w-full py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 border-2 ${
+              player.isAvailable
+                ? "bg-emerald-600 text-white border-emerald-600 shadow-lg"
+                : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            {player.isAvailable ? (
+              <UserPlus size={16} />
+            ) : (
+              <UserMinus size={16} />
+            )}
+            {player.isAvailable ? "KADRODA VAR" : "KADROYA EKLE"}
+          </button>
         )}
 
         <div className="mt-4 flex gap-2 pt-3 border-t border-gray-50">
@@ -543,11 +546,10 @@ export default function App() {
   const [view, setView] = useState<"list" | "match" | "rank">("list");
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [editingStats, setEditingStats] = useState<Stats | null>(null);
-  const [selectedMatchDay, setSelectedMatchDay] = useState<string | null>(null);
   const [resetStatus, setResetStatus] = useState<string | null>(null);
   const [showResetMenu, setShowResetMenu] = useState(false);
   const [confirmModal, setConfirmModal] = useState<any>(null);
-  const [teams, setTeams] = useState<any>(null);
+  const [matchData, setMatchData] = useState<MatchData | null>(null);
 
   const isAdmin = currentIdentity?.name === "Eren";
 
@@ -586,7 +588,7 @@ export default function App() {
               collection(db, "artifacts", appId, "public", "data", "players"),
               {
                 name,
-                availableDays: [],
+                isAvailable: false,
                 isGuest: false,
                 goals: 0,
                 wins: 0,
@@ -603,6 +605,7 @@ export default function App() {
               goals: p.goals || 0,
               wins: p.wins || 0,
               losses: p.losses || 0,
+              isAvailable: p.isAvailable || false,
               votes: p.votes || {},
             }))
           );
@@ -610,28 +613,19 @@ export default function App() {
         setLoading(false);
       }
     );
-    return () => unsubPlayers();
-  }, [user]);
 
-  const bestDayStats = useMemo(() => {
-    if (players.length === 0) return null;
-    let counts: Record<string, number> = {};
-    DAYS.forEach((d) => (counts[d.id] = 0));
-    players.forEach((p) =>
-      p.availableDays?.forEach((day: string) => {
-        if (counts[day] !== undefined) counts[day]++;
-      })
-    );
-    let maxDay: Day | null = null;
-    let maxCount = -1;
-    DAYS.forEach((d) => {
-      if (counts[d.id] > maxCount) {
-        maxCount = counts[d.id];
-        maxDay = d;
+    const unsubMatch = onSnapshot(
+      doc(db, "artifacts", appId, "public", "data", "match", "current"),
+      (d) => {
+        setMatchData(d.exists() ? (d.data() as MatchData) : null);
       }
-    });
-    return { day: maxDay, count: maxCount };
-  }, [players]);
+    );
+
+    return () => {
+      unsubPlayers();
+      unsubMatch();
+    };
+  }, [user]);
 
   const onUpdateGoals = async (player: Player, delta: number) => {
     const newGoals = Math.max(0, (player.goals || 0) + delta);
@@ -653,24 +647,18 @@ export default function App() {
     );
   };
 
-  const handleToggleDay = async (player: Player, dayId: string) => {
-    const currentDays = player.availableDays || [];
-    let newDays = currentDays.includes(dayId)
-      ? currentDays.filter((d: string) => d !== dayId)
-      : [...currentDays, dayId];
+  const onToggleAvailability = async (player: Player) => {
     await updateDoc(
       doc(db, "artifacts", appId, "public", "data", "players", player.id),
-      { availableDays: newDays }
+      { isAvailable: !player.isAvailable }
     );
   };
 
   const openEditModal = (player: Player) => {
     setEditingPlayer(player);
     if (currentIdentity && player.id === currentIdentity.id) {
-      // Eğer KENDİME bakıyorsam: GRUP ORTALAMASINI GÖSTER
       setEditingStats(player.stats);
     } else if (currentIdentity) {
-      // Eğer başkasına oylama yapıyorsam: KENDİ OYUMU VEYA VARSAYILAN 60'I GÖSTER
       const myVote = player.votes?.[currentIdentity.id];
       setEditingStats(
         myVote || { pac: 60, sho: 60, pas: 60, dri: 60, def: 60, phy: 60 }
@@ -680,7 +668,6 @@ export default function App() {
 
   const handleUpdateStats = async () => {
     if (!editingPlayer || !editingStats || !currentIdentity) return;
-    // Eğer kendime bakıyorsam güncelleme yapma (Sadece görme yetkisi)
     if (editingPlayer.id === currentIdentity.id) {
       setEditingPlayer(null);
       setEditingStats(null);
@@ -723,61 +710,72 @@ export default function App() {
     setEditingStats(null);
   };
 
-  const handleGenerateTeams = () => {
-    const fallbackDayId = bestDayStats?.day?.id || "Pzt";
-    const targetDay = selectedMatchDay || fallbackDayId;
-    const pool = players.filter(
-      (p) => p.availableDays && p.availableDays.includes(targetDay)
-    );
+  const handleGenerateTeams = async () => {
+    const pool = players.filter((p) => p.isAvailable);
     if (pool.length < 2) return;
 
-    const sortedPool = [...pool].sort(
-      (a, b) =>
-        calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses) -
-        calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses)
-    );
-    const teamA: Player[] = [];
-    const teamB: Player[] = [];
-    let scoreA = 0;
-    let scoreB = 0;
-
-    sortedPool.forEach((p) => {
-      const impact = calculateGeneralImpact(p.stats, p.goals, p.wins, p.losses);
-      if (scoreA <= scoreB) {
-        teamA.push(p);
-        scoreA += impact;
-      } else {
-        teamB.push(p);
-        scoreB += impact;
-      }
-    });
-
-    const assignPos = (team: Player[]) => {
-      const sorted = [...team].sort(
+    const generateVariant = () => {
+      const sortedPool = [...pool].sort(
         (a, b) =>
           calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses) -
           calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses)
       );
-      return sorted.map((p, idx) => {
-        let pos: "DEF" | "ORT" | "FOR" = "ORT";
-        if (idx < team.length / 3) pos = "DEF";
-        else if (idx >= team.length - team.length / 3) pos = "FOR";
-        return { ...p, assignedPos: pos };
+      const teamA: Player[] = [];
+      const teamB: Player[] = [];
+      let scoreA = 0;
+      let scoreB = 0;
+
+      sortedPool.forEach((p) => {
+        const impact = calculateGeneralImpact(
+          p.stats,
+          p.goals,
+          p.wins,
+          p.losses
+        );
+        if (scoreA <= scoreB) {
+          teamA.push(p);
+          scoreA += impact;
+        } else {
+          teamB.push(p);
+          scoreB += impact;
+        }
       });
+
+      const assignPos = (team: Player[]) => {
+        const sorted = [...team].sort(
+          (a, b) =>
+            calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses) -
+            calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses)
+        );
+        return sorted.map((p, idx) => {
+          let pos: "DEF" | "ORT" | "FOR" = "ORT";
+          if (idx < team.length / 3) pos = "DEF";
+          else if (idx >= team.length - team.length / 3) pos = "FOR";
+          return { ...p, assignedPos: pos };
+        });
+      };
+      return { tA: assignPos(teamA), tB: assignPos(teamB) };
     };
 
-    setTeams({
-      tA: assignPos(teamA),
-      tB: assignPos(teamB),
-      day: DAYS.find((d) => d.id === targetDay)?.full || "??",
-    });
+    const options = [0, 1, 2, 3, 4].map((i) => ({
+      id: i,
+      ...generateVariant(),
+    }));
+    await setDoc(
+      doc(db, "artifacts", appId, "public", "data", "match", "current"),
+      {
+        day: "GÜNCEL MAÇ",
+        options,
+        createdAt: Date.now(),
+      }
+    );
   };
 
   const handleResetAllStats = () => {
     setConfirmModal({
       show: true,
       title: "Ligi Sıfırla",
-      desc: "TÜM oyuncu verileri silinecek. Emin misin?",
+      desc: "TÜM veriler silinecek. Emin misin?",
       action: async () => {
         const defaultStats = {
           pac: 60,
@@ -791,11 +789,21 @@ export default function App() {
           players.map((p) =>
             updateDoc(
               doc(db, "artifacts", appId, "public", "data", "players", p.id),
-              { stats: defaultStats, votes: {}, goals: 0, wins: 0, losses: 0 }
+              {
+                stats: defaultStats,
+                votes: {},
+                goals: 0,
+                wins: 0,
+                losses: 0,
+                isAvailable: false,
+              }
             )
           )
         );
-        setResetStatus("Lig Sıfırlandı.");
+        await deleteDoc(
+          doc(db, "artifacts", appId, "public", "data", "match", "current")
+        );
+        setResetStatus("Sıfırlandı.");
         setTimeout(() => setResetStatus(null), 2000);
         setShowResetMenu(false);
         setConfirmModal(null);
@@ -868,29 +876,6 @@ export default function App() {
       <div className="max-w-2xl mx-auto p-4 md:p-6">
         {view === "list" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in">
-            {isAdmin && bestDayStats && (
-              <div className="md:col-span-2 mb-2 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2rem] p-6 text-white shadow-xl flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1 opacity-80">
-                    <Calendar size={14} />{" "}
-                    <span className="text-[10px] font-bold uppercase">
-                      Maç Günü Adayı
-                    </span>
-                  </div>
-                  <h2 className="text-2xl font-black">
-                    {bestDayStats.day?.full || "??"}
-                  </h2>
-                </div>
-                <div className="bg-white/20 backdrop-blur-md px-5 py-3 rounded-2xl text-center border border-white/10">
-                  <span className="block text-2xl font-black">
-                    {bestDayStats.count}
-                  </span>
-                  <span className="text-[9px] font-bold uppercase opacity-80">
-                    Kişi Müsait
-                  </span>
-                </div>
-              </div>
-            )}
             {players
               .sort((a, b) => (a.id === currentIdentity.id ? -1 : 1))
               .map((p) => (
@@ -900,7 +885,7 @@ export default function App() {
                   isSelf={p.id === currentIdentity.id}
                   isAdmin={isAdmin}
                   onEdit={openEditModal}
-                  onToggleDay={handleToggleDay}
+                  onToggleAvailability={onToggleAvailability}
                   onDelete={() => {}}
                   onUpdateGoals={onUpdateGoals}
                   onUpdateMatchCount={onUpdateMatchCount}
@@ -910,47 +895,29 @@ export default function App() {
         )}
 
         {view === "match" && (
-          <div className="animate-in fade-in pb-10">
+          <div className="animate-in fade-in">
             <div className="bg-white rounded-[2rem] p-8 text-center shadow-sm border border-gray-100 mb-8">
               <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6">
                 <Trophy size={32} />
               </div>
               <h2 className="text-2xl font-black mb-4 uppercase tracking-tighter">
-                Kadro Mühendisi
+                Kadro Kurulumu
               </h2>
-              <div className="flex flex-wrap justify-center gap-2 mb-8">
-                {DAYS.map((d) => (
-                  <button
-                    key={d.id}
-                    onClick={() => setSelectedMatchDay(d.id)}
-                    className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all border-2 ${
-                      selectedMatchDay === d.id
-                        ? "bg-gray-900 text-white border-gray-900 shadow-md scale-105"
-                        : "bg-gray-50 text-gray-400 border-transparent hover:border-gray-200"
-                    }`}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-              </div>
+              <p className="text-xs text-gray-400 font-bold mb-6">
+                Listedeki "KADRODA VAR" işaretli oyuncularla takımlar kurulur.
+              </p>
               {isAdmin && (
                 <button
                   onClick={handleGenerateTeams}
                   className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all uppercase"
                 >
-                  TAKIMLARI OLUŞTUR
+                  TAKIMLARI OLUŞTUR / YENİLE
                 </button>
               )}
             </div>
 
-            {teams ? (
-              <div className="space-y-6 pb-20">
-                <TacticalPitch
-                  teamA={teams.tA}
-                  teamB={teams.tB}
-                  dayName={teams.day}
-                />
-              </div>
+            {matchData ? (
+              <TacticalPitchVariations matchData={matchData} />
             ) : (
               <div className="text-center py-20 opacity-20">
                 <PlayCircle size={60} className="mx-auto mb-4" />
@@ -965,7 +932,6 @@ export default function App() {
         {view === "rank" && <Leaderboard players={players} />}
       </div>
 
-      {/* Navigasyon Barı */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-xl border border-gray-200/50 rounded-full shadow-2xl p-1.5 flex gap-1 z-40">
         <button
           onClick={() => setView("list")}
@@ -1061,37 +1027,37 @@ export default function App() {
                 disabled={editingPlayer.id === currentIdentity?.id}
                 label="Defans"
                 value={editingStats.def}
-                onChange={(v) => setEditingStats({ ...editingStats, def: v })}
+                onChange={(v) => setEditingStats({ ...editingStats!, def: v })}
               />
               <AppleSlider
                 disabled={editingPlayer.id === currentIdentity?.id}
                 label="Fizik"
                 value={editingStats.phy}
-                onChange={(v) => setEditingStats({ ...editingStats, phy: v })}
+                onChange={(v) => setEditingStats({ ...editingStats!, phy: v })}
               />
               <AppleSlider
                 disabled={editingPlayer.id === currentIdentity?.id}
                 label="Hız"
                 value={editingStats.pac}
-                onChange={(v) => setEditingStats({ ...editingStats, pac: v })}
+                onChange={(v) => setEditingStats({ ...editingStats!, pac: v })}
               />
               <AppleSlider
                 disabled={editingPlayer.id === currentIdentity?.id}
                 label="Pas"
                 value={editingStats.pas}
-                onChange={(v) => setEditingStats({ ...editingStats, pas: v })}
+                onChange={(v) => setEditingStats({ ...editingStats!, pas: v })}
               />
               <AppleSlider
                 disabled={editingPlayer.id === currentIdentity?.id}
                 label="Dripling"
                 value={editingStats.dri}
-                onChange={(v) => setEditingStats({ ...editingStats, dri: v })}
+                onChange={(v) => setEditingStats({ ...editingStats!, dri: v })}
               />
               <AppleSlider
                 disabled={editingPlayer.id === currentIdentity?.id}
                 label="Şut"
                 value={editingStats.sho}
-                onChange={(v) => setEditingStats({ ...editingStats, sho: v })}
+                onChange={(v) => setEditingStats({ ...editingStats!, sho: v })}
               />
             </div>
             <button
@@ -1116,19 +1082,16 @@ export default function App() {
 
 const Leaderboard = ({ players }: { players: Player[] }) => {
   const [mode, setMode] = useState<"goals" | "overall">("overall");
-
   const sortedPlayers = useMemo(() => {
-    if (mode === "goals") {
+    if (mode === "goals")
       return [...players]
         .filter((p) => p.goals > 0)
         .sort((a, b) => b.goals - a.goals);
-    } else {
-      return [...players].sort((a, b) => {
-        const ovrA = calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses);
-        const ovrB = calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses);
-        return ovrB - ovrA;
-      });
-    }
+    return [...players].sort(
+      (a, b) =>
+        calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses) -
+        calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses)
+    );
   }, [players, mode]);
 
   return (
@@ -1155,11 +1118,10 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
           <Medal size={14} /> Gol Krallığı
         </button>
       </div>
-
       <div className="space-y-3">
         {sortedPlayers.length === 0 ? (
-          <div className="text-center py-10 text-gray-400 italic bg-white rounded-3xl border border-dashed border-gray-200">
-            Veri girişi yapılmadı.
+          <div className="text-center py-10 text-gray-400 italic bg-white rounded-3xl border border-dashed">
+            Veri yok.
           </div>
         ) : (
           sortedPlayers.map((p, idx) => {
@@ -1233,79 +1195,33 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
   );
 };
 
-const TacticalPitch = ({
-  teamA,
-  teamB,
-  dayName,
-}: {
-  teamA: Player[];
-  teamB: Player[];
-  dayName: string;
-}) => {
-  const groupByPos = (team: Player[]) => {
-    const groups: Record<string, Player[]> = { DEF: [], ORT: [], FOR: [] };
-    team.forEach((p) => {
-      const { pos } = getBestPositionInfo(p.stats, p.goals, p.wins, p.losses);
-      const assigned = p.assignedPos || pos;
-      if (groups[assigned]) groups[assigned].push(p);
-      else groups.ORT.push(p);
-    });
-    return groups;
-  };
-
-  const tAGroups = groupByPos(teamA);
-  const tBGroups = groupByPos(teamB);
-
+const TacticalPitchVariations = ({ matchData }: { matchData: MatchData }) => {
+  const [selectedOptionId, setSelectedOptionId] = useState<number>(0);
+  const currentOption =
+    matchData.options[selectedOptionId] || matchData.options[0];
+  if (!currentOption) return null;
   return (
-    <div className="mt-8 relative max-w-4xl mx-auto pb-10">
-      <div className="absolute -top-5 left-0 right-0 text-center z-20">
-        <span className="bg-gray-900 text-white text-[10px] md:text-xs font-bold px-4 py-1.5 rounded-full shadow-xl border-2 border-white/20 uppercase tracking-widest">
-          {dayName} KADROSU
-        </span>
+    <div className="space-y-4">
+      <div className="flex overflow-x-auto gap-2 mb-2 pb-2 px-2 snap-x scrollbar-hide">
+        {matchData.options.map((opt, idx) => (
+          <button
+            key={opt.id}
+            onClick={() => setSelectedOptionId(idx)}
+            className={`snap-start flex-shrink-0 px-5 py-2.5 rounded-xl text-xs font-black border-2 transition-all ${
+              selectedOptionId === idx
+                ? "bg-blue-600 text-white border-blue-600 shadow-lg"
+                : "bg-white text-gray-500 border-gray-200"
+            }`}
+          >
+            VARYASYON {idx + 1}
+          </button>
+        ))}
       </div>
-      <div className="rounded-[2.5rem] overflow-hidden bg-emerald-700 shadow-2xl relative w-full h-[650px] md:h-[800px] border-[8px] border-white/10">
-        <div className="absolute inset-0 opacity-10 bg-[size:80px_80px] bg-[linear-gradient(rgba(255,255,255,0.1)_2px,transparent_2px),linear-gradient(90deg,rgba(255,255,255,0.1)_2px,transparent_2px)]"></div>
-        <div className="absolute inset-4 border-2 border-white/20 rounded-[2rem] pointer-events-none"></div>
-        <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-white/20 -translate-y-1/2"></div>
-        <div className="absolute top-1/2 left-1/2 w-24 h-24 border-2 border-white/20 rounded-full -translate-x-1/2 -translate-y-1/2"></div>
-
-        <div className="absolute inset-0 flex flex-col z-10 py-8 justify-between">
-          <div className="flex flex-col gap-10">
-            <div className="flex justify-evenly px-4">
-              {tAGroups.DEF.map((p) => (
-                <PlayerMarker key={p.id} p={p} color="border-blue-500" />
-              ))}
-            </div>
-            <div className="flex justify-evenly px-4">
-              {tAGroups.ORT.map((p) => (
-                <PlayerMarker key={p.id} p={p} color="border-blue-500" />
-              ))}
-            </div>
-            <div className="flex justify-evenly px-4">
-              {tAGroups.FOR.map((p) => (
-                <PlayerMarker key={p.id} p={p} color="border-blue-500" />
-              ))}
-            </div>
-          </div>
-          <div className="flex flex-col-reverse gap-10">
-            <div className="flex justify-evenly px-4">
-              {tBGroups.DEF.map((p) => (
-                <PlayerMarker key={p.id} p={p} color="border-orange-500" />
-              ))}
-            </div>
-            <div className="flex justify-evenly px-4">
-              {tBGroups.ORT.map((p) => (
-                <PlayerMarker key={p.id} p={p} color="border-orange-500" />
-              ))}
-            </div>
-            <div className="flex justify-evenly px-4">
-              {tBGroups.FOR.map((p) => (
-                <PlayerMarker key={p.id} p={p} color="border-orange-500" />
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+      <TacticalPitch
+        teamA={currentOption.tA}
+        teamB={currentOption.tB}
+        dayName="KADRO"
+      />
     </div>
   );
 };
