@@ -42,6 +42,8 @@ import {
   Activity,
   UserPlus,
   UserMinus,
+  UserCheck,
+  Shuffle,
 } from "lucide-react";
 
 // --- 1. Konfigürasyon ve Tipler ---
@@ -174,7 +176,51 @@ const getPositionColor = (pos: string) => {
   }
 };
 
-// --- 3. UI Bileşenleri (Referans hatalarını önlemek için hiyerarşik sıra) ---
+// --- 3. UI Bileşenleri ---
+
+const AppleSlider = ({
+  label,
+  value,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  disabled?: boolean;
+}) => (
+  <div className="space-y-3">
+    <div className="flex justify-between items-end">
+      <span className="text-sm font-bold text-gray-700 uppercase tracking-tight">
+        {label}
+      </span>
+      <span
+        className={`text-xl font-bold tabular-nums ${
+          value >= 85 ? "text-emerald-600" : "text-gray-900"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+    {disabled ? (
+      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-blue-500 transition-all duration-700"
+          style={{ width: `${((value - 40) / 59) * 100}%` }}
+        />
+      </div>
+    ) : (
+      <input
+        type="range"
+        min="40"
+        max="99"
+        value={value}
+        onChange={(e) => onChange(parseInt(e.target.value))}
+        className="w-full h-2 bg-gray-100 rounded-full appearance-none cursor-pointer accent-blue-600"
+      />
+    )}
+  </div>
+);
 
 const PlayerMarker = ({ p }: { p: Player }) => {
   const overall = calculateGeneralImpact(p.stats, p.goals, p.wins, p.losses);
@@ -287,7 +333,7 @@ const TacticalPitchVariations = ({ matchData }: { matchData: MatchData }) => {
                 : "bg-white text-gray-500 border-gray-200"
             }`}
           >
-            VARYASYON {idx + 1}
+            SEÇENEK {idx + 1}
           </button>
         ))}
       </div>
@@ -295,50 +341,6 @@ const TacticalPitchVariations = ({ matchData }: { matchData: MatchData }) => {
     </div>
   );
 };
-
-const AppleSlider = ({
-  label,
-  value,
-  onChange,
-  disabled = false,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  disabled?: boolean;
-}) => (
-  <div className="space-y-3">
-    <div className="flex justify-between items-end">
-      <span className="text-sm font-bold text-gray-700 uppercase tracking-tight">
-        {label}
-      </span>
-      <span
-        className={`text-xl font-bold tabular-nums ${
-          value >= 85 ? "text-emerald-600" : "text-gray-900"
-        }`}
-      >
-        {value}
-      </span>
-    </div>
-    {disabled ? (
-      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-blue-500 transition-all duration-700"
-          style={{ width: `${((value - 40) / 59) * 100}%` }}
-        />
-      </div>
-    ) : (
-      <input
-        type="range"
-        min="40"
-        max="99"
-        value={value}
-        onChange={(e) => onChange(parseInt(e.target.value))}
-        className="w-full h-2 bg-gray-100 rounded-full appearance-none cursor-pointer accent-blue-600"
-      />
-    )}
-  </div>
-);
 
 const IdentityScreen = ({
   players,
@@ -517,7 +519,7 @@ const PlayerCard = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onUpdateGoals(player, -1)}
-                className="w-7 h-7 rounded-lg bg-white border border-orange-200 flex items-center justify-center text-orange-600"
+                className="w-7 h-7 rounded-lg bg-white border border-orange-200 flex items-center justify-center text-orange-600 hover:bg-orange-100"
               >
                 <Minus size={14} />
               </button>
@@ -526,7 +528,7 @@ const PlayerCard = ({
               </span>
               <button
                 onClick={() => onUpdateGoals(player, 1)}
-                className="w-7 h-7 rounded-lg bg-orange-600 text-white flex items-center justify-center shadow-md"
+                className="w-7 h-7 rounded-lg bg-orange-600 text-white flex items-center justify-center shadow-md active:scale-90"
               >
                 <Plus size={14} />
               </button>
@@ -552,7 +554,7 @@ const PlayerCard = ({
                 </span>
                 <button
                   onClick={() => onUpdateMatchCount(player, "wins", 1)}
-                  className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm"
+                  className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm active:scale-90"
                 >
                   <Plus size={14} />
                 </button>
@@ -565,7 +567,7 @@ const PlayerCard = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => onUpdateMatchCount(player, "losses", -1)}
-                  className="w-7 h-7 rounded-lg bg-white border border-red-200 flex items-center justify-center text-red-600"
+                  className="w-7 h-7 rounded-lg bg-white border border-red-200 flex items-center justify-center text-red-600 hover:bg-red-100"
                 >
                   <Minus size={14} />
                 </button>
@@ -574,7 +576,7 @@ const PlayerCard = ({
                 </span>
                 <button
                   onClick={() => onUpdateMatchCount(player, "losses", 1)}
-                  className="w-7 h-7 rounded-lg bg-red-600 text-white flex items-center justify-center shadow-sm"
+                  className="w-7 h-7 rounded-lg bg-red-600 text-white flex items-center justify-center shadow-sm active:scale-90"
                 >
                   <Plus size={14} />
                 </button>
@@ -589,13 +591,13 @@ const PlayerCard = ({
             className={`mt-4 w-full py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-2 border-2 ${
               player.isAvailable
                 ? "bg-emerald-600 text-white border-emerald-600 shadow-lg"
-                : "bg-white text-gray-400 border-gray-200"
+                : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
             }`}
           >
             {player.isAvailable ? (
-              <UserPlus size={14} />
+              <UserCheck size={14} />
             ) : (
-              <UserMinus size={14} />
+              <UserPlus size={14} />
             )}
             {player.isAvailable ? "MAÇ KADROSUNDA" : "KADROYA EKLE"}
           </button>
@@ -654,7 +656,7 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
           className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
             mode === "overall"
               ? "bg-gray-900 text-white shadow-lg"
-              : "text-gray-500"
+              : "text-gray-500 hover:bg-gray-50"
           }`}
         >
           <Zap size={14} /> Overall
@@ -664,7 +666,7 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
           className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
             mode === "goals"
               ? "bg-orange-600 text-white shadow-lg"
-              : "text-gray-500"
+              : "text-gray-500 hover:bg-gray-50"
           }`}
         >
           <Medal size={14} /> Gol Krallığı
@@ -761,6 +763,7 @@ export default function App() {
   const [showResetMenu, setShowResetMenu] = useState(false);
   const [confirmModal, setConfirmModal] = useState<any>(null);
   const [matchData, setMatchData] = useState<MatchData | null>(null);
+  const [newPlayerName, setNewPlayerName] = useState("");
 
   const isAdmin = currentIdentity?.name === "Eren";
 
@@ -865,14 +868,47 @@ export default function App() {
     );
   };
 
+  const handleAddPlayer = async () => {
+    if (!newPlayerName.trim()) return;
+    const playersRef = collection(
+      db,
+      "artifacts",
+      appId,
+      "public",
+      "data",
+      "players"
+    );
+    await addDoc(playersRef, {
+      name: newPlayerName.trim(),
+      isAvailable: false,
+      isGuest: false,
+      goals: 0,
+      wins: 0,
+      losses: 0,
+      stats: { pac: 60, sho: 60, pas: 60, dri: 60, def: 60, phy: 60 },
+      votes: {},
+    });
+    setNewPlayerName("");
+    setResetStatus("Yeni oyuncu eklendi!");
+    setTimeout(() => setResetStatus(null), 2000);
+  };
+
   const openEditModal = (player: Player) => {
     setEditingPlayer(player);
     if (currentIdentity && player.id === currentIdentity.id) {
       setEditingStats(player.stats);
     } else if (currentIdentity) {
-      const myVote = player.votes?.[currentIdentity.id];
+      // HAFIZALI OYLAMA: Kullanıcının bu oyuncu için eski bir oyu var mı bak
+      const myExistingVote = player.votes?.[currentIdentity.id];
       setEditingStats(
-        myVote || { pac: 60, sho: 60, pas: 60, dri: 60, def: 60, phy: 60 }
+        myExistingVote || {
+          pac: 60,
+          sho: 60,
+          pas: 60,
+          dri: 60,
+          def: 60,
+          phy: 60,
+        }
       );
     }
   };
@@ -894,8 +930,14 @@ export default function App() {
       editingPlayer.id
     );
     const pSnap = await getDoc(playerRef);
-    const currentVotes = pSnap.data()?.votes || {};
+    if (!pSnap.exists()) return;
+
+    const playerData = pSnap.data() as Player;
+    const currentVotes = playerData.votes || {};
+
+    // Oyu kullanıcının ID'sine göre kaydet/güncelle
     currentVotes[currentIdentity.id] = editingStats;
+
     const statKeys: (keyof Stats)[] = [
       "def",
       "phy",
@@ -904,18 +946,21 @@ export default function App() {
       "dri",
       "sho",
     ];
-    const calculatedStats = { ...(pSnap.data()?.stats || {}) };
+    const calculatedStats = { ...playerData.stats };
+
+    // Tüm oyların ortalamasını yeniden hesapla
     statKeys.forEach((key) => {
       let sum = 0;
       let count = 0;
-      Object.values(currentVotes).forEach((v: any) => {
-        if (v[key] !== undefined) {
-          sum += v[key];
+      Object.values(currentVotes).forEach((vote: any) => {
+        if (vote[key] !== undefined) {
+          sum += vote[key];
           count++;
         }
       });
       calculatedStats[key] = count > 0 ? Math.round(sum / count) : 60;
     });
+
     await updateDoc(playerRef, { stats: calculatedStats, votes: currentVotes });
     setEditingPlayer(null);
     setEditingStats(null);
@@ -925,7 +970,7 @@ export default function App() {
     const pool = players.filter((p) => p.isAvailable);
     if (pool.length < 2) return;
 
-    const generateVariant = () => {
+    const generateBalancedVariant = () => {
       const sortedPool = [...pool].sort(
         (a, b) =>
           calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses) -
@@ -933,24 +978,24 @@ export default function App() {
       );
       const teamA: Player[] = [];
       const teamB: Player[] = [];
-      let scoreA = 0;
-      let scoreB = 0;
 
-      sortedPool.forEach((p) => {
-        const impact = calculateGeneralImpact(
-          p.stats,
-          p.goals,
-          p.wins,
-          p.losses
-        );
-        if (scoreA <= scoreB) {
-          teamA.push(p);
-          scoreA += impact;
+      // Rastgele dengeli dağıtım
+      for (let i = 0; i < sortedPool.length; i += 2) {
+        const p1 = sortedPool[i];
+        const p2 = sortedPool[i + 1];
+        if (p2) {
+          if (Math.random() > 0.5) {
+            teamA.push(p1);
+            teamB.push(p2);
+          } else {
+            teamA.push(p2);
+            teamB.push(p1);
+          }
         } else {
-          teamB.push(p);
-          scoreB += impact;
+          if (Math.random() > 0.5) teamA.push(p1);
+          else teamB.push(p1);
         }
-      });
+      }
 
       const assignPos = (team: Player[]) => {
         const sorted = [...team].sort(
@@ -970,7 +1015,7 @@ export default function App() {
 
     const options = [0, 1, 2, 3, 4].map((i) => ({
       id: i,
-      ...generateVariant(),
+      ...generateBalancedVariant(),
     }));
     await setDoc(
       doc(db, "artifacts", appId, "public", "data", "match", "current"),
@@ -1021,6 +1066,20 @@ export default function App() {
     });
   };
 
+  const handleDeletePlayer = async (id: string) => {
+    setConfirmModal({
+      show: true,
+      title: "Oyuncuyu Sil",
+      desc: "Bu oyuncuyu ligden tamamen silmek istediğine emin misin?",
+      action: async () => {
+        await deleteDoc(
+          doc(db, "artifacts", appId, "public", "data", "players", id)
+        );
+        setConfirmModal(null);
+      },
+    });
+  };
+
   if (loading)
     return (
       <div className="h-screen flex flex-col items-center justify-center font-bold text-gray-400 gap-4 tracking-widest uppercase animate-pulse">
@@ -1032,6 +1091,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] text-gray-900 pb-28 font-sans relative selection:bg-blue-100">
+      {/* Header */}
       <div className="bg-white/80 backdrop-blur-xl sticky top-0 z-40 border-b border-gray-200/60 p-4 flex items-center justify-between shadow-sm">
         <div className="flex flex-col">
           <h1 className="text-xl font-black tracking-tight uppercase">
@@ -1077,6 +1137,7 @@ export default function App() {
           </button>
         </div>
       </div>
+
       {resetStatus && (
         <div className="bg-emerald-500 text-white text-xs font-bold text-center py-3 shadow-lg animate-in slide-in-from-top">
           {resetStatus}
@@ -1086,6 +1147,27 @@ export default function App() {
       <div className="max-w-2xl mx-auto p-4 md:p-6">
         {view === "list" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in">
+            {isAdmin && (
+              <div className="md:col-span-2 bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 mb-2">
+                <h3 className="text-xs font-black text-gray-400 mb-4 uppercase tracking-widest flex items-center gap-2">
+                  <UserPlus size={14} /> Yeni Oyuncu Ekle
+                </h3>
+                <div className="flex gap-2">
+                  <input
+                    value={newPlayerName}
+                    onChange={(e) => setNewPlayerName(e.target.value)}
+                    placeholder="İsim soyisim..."
+                    className="flex-1 bg-gray-50 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 transition-all font-bold"
+                  />
+                  <button
+                    onClick={handleAddPlayer}
+                    className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold text-xs shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
+                  >
+                    EKLE
+                  </button>
+                </div>
+              </div>
+            )}
             {players
               .sort((a, b) => (a.id === currentIdentity.id ? -1 : 1))
               .map((p) => (
@@ -1096,7 +1178,7 @@ export default function App() {
                   isAdmin={isAdmin}
                   onEdit={openEditModal}
                   onToggleAvailability={onToggleAvailability}
-                  onDelete={() => {}}
+                  onDelete={handleDeletePlayer}
                   onUpdateGoals={onUpdateGoals}
                   onUpdateMatchCount={onUpdateMatchCount}
                 />
@@ -1111,19 +1193,19 @@ export default function App() {
                 <Trophy size={32} />
               </div>
               <h2 className="text-2xl font-black mb-4 uppercase tracking-tighter">
-                Kadro Mühendisi
+                Kadro Kurulumu
               </h2>
-              <p className="text-xs text-gray-400 font-bold mb-6">
+              <p className="text-xs text-gray-400 font-bold mb-6 italic">
                 Listede işaretli olan{" "}
-                {players.filter((p) => p.isAvailable).length} oyuncu ile
+                {players.filter((p) => p.isAvailable).length} oyuncu ile dengeli
                 takımlar kurulur.
               </p>
               {isAdmin && (
                 <button
                   onClick={handleGenerateTeams}
-                  className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all uppercase tracking-widest"
+                  className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all uppercase tracking-widest flex items-center justify-center gap-3"
                 >
-                  TAKIMLARI OLUŞTUR
+                  <Shuffle size={20} /> TAKIMLARI OLUŞTUR / YENİLE
                 </button>
               )}
             </div>
@@ -1144,6 +1226,7 @@ export default function App() {
         {view === "rank" && <Leaderboard players={players} />}
       </div>
 
+      {/* Nav Bar */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-xl border border-gray-200/50 rounded-full shadow-2xl p-1.5 flex gap-1 z-40">
         <button
           onClick={() => setView("list")}
@@ -1180,6 +1263,7 @@ export default function App() {
         </button>
       </div>
 
+      {/* Modals */}
       {confirmModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/60 backdrop-blur-md p-6">
           <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 text-center shadow-2xl animate-in zoom-in-95">
