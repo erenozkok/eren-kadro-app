@@ -41,9 +41,10 @@ import {
   TrendingUp,
   TrendingDown,
   Award,
+  Shuffle,
 } from "lucide-react";
 
-// --- 1. Sabitler ve Ayarlar (Hoisting hatalarını önlemek için en üstte) ---
+// --- 1. Sabitler ve Tipler (En Üstte - Hoisting Fix) ---
 interface Day {
   id: string;
   label: string;
@@ -91,7 +92,6 @@ const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 
-// --- 2. Tipler ---
 interface Stats {
   pac: number;
   sho: number;
@@ -126,7 +126,7 @@ interface MatchData {
   createdAt: number;
 }
 
-// --- 3. Yardımcı Fonksiyonlar ---
+// --- 2. Yardımcı Fonksiyonlar ---
 
 const calculatePositionalRatings = (
   stats: any,
@@ -193,7 +193,7 @@ const getPositionColor = (pos: string) => {
   }
 };
 
-// --- 4. Alt Bileşenler (Hiyerarşi Fix) ---
+// --- 3. Alt Bileşenler (App'den önce tanımlanmalı) ---
 
 const AppleSlider = ({
   label,
@@ -221,7 +221,7 @@ const AppleSlider = ({
       max="99"
       value={value}
       onChange={(e) => onChange(parseInt(e.target.value))}
-      className="w-full h-2 bg-gray-100 rounded-full appearance-none cursor-pointer accent-blue-600 transition-all"
+      className="w-full h-2 bg-gray-100 rounded-full appearance-none cursor-pointer accent-blue-600"
     />
   </div>
 );
@@ -281,7 +281,7 @@ const IdentityScreen = ({
             <input
               type="text"
               placeholder="Kendini ara..."
-              className="w-full bg-white rounded-2xl px-5 py-4 text-gray-900 border-2 border-gray-100 outline-none focus:border-blue-500 transition-all font-bold text-lg"
+              className="w-full bg-white rounded-2xl px-5 py-4 text-gray-900 border-2 border-gray-100 outline-none focus:border-blue-500 transition-all font-bold text-lg placeholder-gray-300"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -732,7 +732,41 @@ const TacticalPitch = ({
   );
 };
 
-// --- 5. Ana Uygulama ---
+// Seçenekler arasında gezinebilmek için varyasyon bileşeni
+const TacticalPitchVariations = ({ matchData }: { matchData: MatchData }) => {
+  const [selectedOptionId, setSelectedOptionId] = useState<number>(0);
+  const currentOption =
+    matchData.options[selectedOptionId] || matchData.options[0];
+
+  if (!currentOption) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex overflow-x-auto gap-2 mb-2 pb-2 px-2 snap-x scrollbar-hide">
+        {matchData.options.map((opt, idx) => (
+          <button
+            key={opt.id}
+            onClick={() => setSelectedOptionId(idx)}
+            className={`snap-start flex-shrink-0 px-5 py-2.5 rounded-xl text-xs font-black border-2 transition-all ${
+              selectedOptionId === idx
+                ? "bg-blue-600 text-white border-blue-600 shadow-lg"
+                : "bg-white text-gray-500 border-gray-200"
+            }`}
+          >
+            SEÇENEK {idx + 1}
+          </button>
+        ))}
+      </div>
+      <TacticalPitch
+        teamA={currentOption.tA}
+        teamB={currentOption.tB}
+        dayName={matchData.day}
+      />
+    </div>
+  );
+};
+
+// --- 4. Main Application ---
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -746,7 +780,7 @@ export default function App() {
   const [resetStatus, setResetStatus] = useState<string | null>(null);
   const [showResetMenu, setShowResetMenu] = useState(false);
   const [confirmModal, setConfirmModal] = useState<any>(null);
-  const [teams, setTeams] = useState<any>(null);
+  const [matchData, setMatchData] = useState<MatchData | null>(null);
 
   const isAdmin = currentIdentity?.name === "Eren";
 
@@ -773,7 +807,7 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(
+    const unsubPlayers = onSnapshot(
       collection(db, "artifacts", appId, "public", "data", "players"),
       (snapshot) => {
         const data = snapshot.docs.map(
@@ -809,19 +843,30 @@ export default function App() {
         setLoading(false);
       }
     );
-    return () => unsub();
+
+    const unsubMatch = onSnapshot(
+      doc(db, "artifacts", appId, "public", "data", "match", "current"),
+      (d) => {
+        setMatchData(d.exists() ? (d.data() as MatchData) : null);
+      }
+    );
+
+    return () => {
+      unsubPlayers();
+      unsubMatch();
+    };
   }, [user]);
 
   const bestDayStats = useMemo(() => {
     if (players.length === 0) return null;
-    let counts: any = {};
+    let counts: Record<string, number> = {};
     DAYS.forEach((d) => (counts[d.id] = 0));
     players.forEach((p) =>
       p.availableDays?.forEach((day: string) => {
         if (counts[day] !== undefined) counts[day]++;
       })
     );
-    let maxDay: any = null;
+    let maxDay: Day | null = null;
     let maxCount = -1;
     DAYS.forEach((d) => {
       if (counts[d.id] > maxCount) {
@@ -829,7 +874,7 @@ export default function App() {
         maxDay = d;
       }
     });
-    return { day: maxDay as Day | null, count: maxCount };
+    return { day: maxDay, count: maxCount };
   }, [players]);
 
   const onUpdateGoals = async (player: Player, delta: number) => {
@@ -902,61 +947,78 @@ export default function App() {
     setEditingStats(null);
   };
 
-  const handleGenerateTeams = () => {
-    const targetDay =
-      selectedMatchDay || (bestDayStats ? bestDayStats.day?.id : "Pzt");
+  const handleGenerateTeams = async () => {
+    const fallbackDayId = bestDayStats?.day?.id || "Pzt";
+    const targetDay = selectedMatchDay || fallbackDayId;
     const pool = players.filter(
       (p) => p.availableDays && p.availableDays.includes(targetDay)
     );
     if (pool.length < 2) return;
 
-    const sortedByGeneral = [...pool].sort(
-      (a, b) =>
-        calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses) -
-        calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses)
-    );
-    const teamA: Player[] = [];
-    const teamB: Player[] = [];
-    let scoreA = 0;
-    let scoreB = 0;
-
-    sortedByGeneral.forEach((p) => {
-      const impact = calculateGeneralImpact(p.stats, p.goals, p.wins, p.losses);
-      if (scoreA <= scoreB) {
-        teamA.push(p);
-        scoreA += impact;
-      } else {
-        teamB.push(p);
-        scoreB += impact;
-      }
-    });
-
-    const assignPos = (team: Player[]) => {
-      const sorted = [...team].sort(
+    const generateVariant = () => {
+      const sortedPool = [...pool].sort(
         (a, b) =>
-          calculatePositionalRatings(b.stats, b.goals, b.wins, b.losses).DEF -
-          calculatePositionalRatings(a.stats, a.goals, a.wins, a.losses).DEF
+          calculateGeneralImpact(b.stats, b.goals, b.wins, b.losses) -
+          calculateGeneralImpact(a.stats, a.goals, a.wins, a.losses)
       );
-      return sorted.map((p, idx) => {
-        let pos: "DEF" | "ORT" | "FOR" = "ORT";
-        if (idx < team.length / 3) pos = "DEF";
-        else if (idx >= team.length - team.length / 3) pos = "FOR";
-        return { ...p, assignedPos: pos };
+      const teamA: Player[] = [];
+      const teamB: Player[] = [];
+      let scoreA = 0;
+      let scoreB = 0;
+
+      sortedPool.forEach((p) => {
+        const impact = calculateGeneralImpact(
+          p.stats,
+          p.goals,
+          p.wins,
+          p.losses
+        );
+        if (scoreA <= scoreB) {
+          teamA.push(p);
+          scoreA += impact;
+        } else {
+          teamB.push(p);
+          scoreB += impact;
+        }
       });
+
+      const assignPos = (team: Player[]) => {
+        const sorted = [...team].sort(
+          (a, b) =>
+            calculatePositionalRatings(b.stats, b.goals, b.wins, b.losses).DEF -
+            calculatePositionalRatings(a.stats, a.goals, a.wins, a.losses).DEF
+        );
+        return sorted.map((p, idx) => {
+          let pos: "DEF" | "ORT" | "FOR" = "ORT";
+          if (idx < team.length / 3) pos = "DEF";
+          else if (idx >= team.length - team.length / 3) pos = "FOR";
+          return { ...p, assignedPos: pos };
+        });
+      };
+
+      return { tA: assignPos(teamA), tB: assignPos(teamB) };
     };
 
-    setTeams({
-      tA: assignPos(teamA),
-      tB: assignPos(teamB),
-      day: DAYS.find((d) => d.id === targetDay)?.full || "??",
-    });
+    const options = [0, 1, 2, 3, 4].map((i) => ({
+      id: i,
+      ...generateVariant(),
+    }));
+
+    await setDoc(
+      doc(db, "artifacts", appId, "public", "data", "match", "current"),
+      {
+        day: DAYS.find((d) => d.id === targetDay)?.full || "??",
+        options,
+        createdAt: Date.now(),
+      }
+    );
   };
 
   const handleResetAllStats = () => {
     setConfirmModal({
       show: true,
       title: "Ligi Sıfırla",
-      desc: "TÜM oyuncu verileri (güçler, goller, W/L sayıları) silinecek. Emin misin?",
+      desc: "TÜM veriler silinecek. Emin misin?",
       action: async () => {
         const defaultStats = {
           pac: 60,
@@ -974,7 +1036,7 @@ export default function App() {
             )
           )
         );
-        setResetStatus("Lig sıfırlandı.");
+        setResetStatus("Sıfırlandı.");
         setTimeout(() => setResetStatus(null), 2000);
         setShowResetMenu(false);
         setConfirmModal(null);
@@ -984,8 +1046,8 @@ export default function App() {
 
   if (loading)
     return (
-      <div className="h-screen flex flex-col items-center justify-center font-bold text-gray-400 gap-4 tracking-widest">
-        <Zap size={40} className="animate-bounce" /> LİG VERİLERİ YÜKLENİYOR...
+      <div className="h-screen flex flex-col items-center justify-center font-bold text-gray-400 gap-4 tracking-widest uppercase animate-pulse">
+        <Zap size={40} /> LİG YÜKLENİYOR...
       </div>
     );
   if (!currentIdentity)
@@ -1129,23 +1191,21 @@ export default function App() {
                   onClick={handleGenerateTeams}
                   className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all"
                 >
-                  TAKIMLARI OLUŞTUR
+                  TAKIMLARI OLUŞTUR / YENİLE
                 </button>
               )}
             </div>
 
-            {teams ? (
+            {matchData ? (
               <div className="space-y-6 pb-20">
-                <TacticalPitch
-                  teamA={teams.tA}
-                  teamB={teams.tB}
-                  dayName={teams.day}
-                />
+                <TacticalPitchVariations matchData={matchData} />
               </div>
             ) : (
               <div className="text-center py-20 opacity-20">
                 <PlayCircle size={60} className="mx-auto mb-4" />
-                <p className="font-bold">Henüz kadro oluşturulmadı.</p>
+                <p className="font-bold uppercase tracking-widest">
+                  Henüz kadro oluşturulmadı.
+                </p>
               </div>
             )}
           </div>
