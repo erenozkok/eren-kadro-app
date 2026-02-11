@@ -43,7 +43,7 @@ import {
   Shuffle,
 } from "lucide-react";
 
-// --- 1. Sabitler ve Ayarlar (En üstte olmalı) ---
+// --- 1. Sabitler ve Ayarlar ---
 interface Day {
   id: string;
   label: string;
@@ -129,7 +129,7 @@ interface MatchData {
 const calculateGeneralImpact = (stats: Stats, goals: number = 0) => {
   const values = Object.values(stats);
   const baseAvg = values.reduce((a, b) => a + b, 0) / values.length;
-  // Düzeltme: Her gol 0.2 puan ekler (5 gol = 1 tam puan)
+  // Her gol 0.2 puan ekler (5 gol = 1 tam puan)
   const finalRating = baseAvg + goals * 0.2;
   return Math.round(Math.min(99, finalRating));
 };
@@ -625,7 +625,7 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
                     </div>
                     <div className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
                       {mode === "overall"
-                        ? `Saf Yetenek: ${baseAvg} | Bonus: +${bonus}`
+                        ? `Yetenek: ${baseAvg} | Bonus: +${bonus}`
                         : `${p.goals} Gol`}
                     </div>
                   </div>
@@ -651,7 +651,7 @@ const Leaderboard = ({ players }: { players: Player[] }) => {
   );
 };
 
-// --- 5. Main Application ---
+// --- 5. Ana Uygulama ---
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [currentIdentity, setCurrentIdentity] = useState<Player | null>(null);
@@ -862,6 +862,7 @@ export default function App() {
     );
   };
 
+  // --- RESET HANDLERS ---
   const handleResetWeek = () => {
     setConfirmModal({
       show: true,
@@ -902,6 +903,39 @@ export default function App() {
           )
         );
         setResetStatus("Goller sıfırlandı.");
+        setTimeout(() => setResetStatus(null), 2000);
+        setShowResetMenu(false);
+        setConfirmModal(null);
+      },
+    });
+  };
+
+  const handleResetAllStats = () => {
+    setConfirmModal({
+      show: true,
+      title: "Tüm Overalları Sıfırla",
+      desc: "BÜTÜN OYUNCULARIN güçleri 60'a dönecek ve verilmiş TÜM OYLAR silinecek. Bu işlem geri alınamaz! Emin misin?",
+      action: async () => {
+        const defaultStats = {
+          pac: 60,
+          sho: 60,
+          pas: 60,
+          dri: 60,
+          def: 60,
+          phy: 60,
+        };
+        await Promise.all(
+          players.map((p) =>
+            updateDoc(
+              doc(db, "artifacts", appId, "public", "data", "players", p.id),
+              {
+                stats: defaultStats,
+                votes: {},
+              }
+            )
+          )
+        );
+        setResetStatus("Tüm istatistikler sıfırlandı.");
         setTimeout(() => setResetStatus(null), 2000);
         setShowResetMenu(false);
         setConfirmModal(null);
@@ -957,8 +991,8 @@ export default function App() {
 
   if (loading)
     return (
-      <div className="flex h-screen items-center justify-center bg-[#F2F2F7] text-gray-400 font-bold">
-        LİG YÜKLENİYOR...
+      <div className="flex h-screen items-center justify-center bg-[#F2F2F7] text-gray-400 font-bold tracking-widest animate-pulse">
+        LİG VERİLERİ YÜKLENİYOR...
       </div>
     );
   if (!currentIdentity)
@@ -993,20 +1027,27 @@ export default function App() {
                   <RefreshCw size={18} />
                 </button>
                 {showResetMenu && (
-                  <div className="absolute top-12 right-0 bg-white shadow-2xl rounded-2xl border border-gray-200 p-2 flex flex-col gap-1 z-50 w-52 animate-in slide-in-from-top-2">
+                  <div className="absolute top-12 right-0 bg-white shadow-2xl rounded-2xl border border-gray-200 p-2 flex flex-col gap-1 z-50 w-56 animate-in slide-in-from-top-2">
                     <button
                       onClick={handleResetWeek}
-                      className="flex items-center gap-3 px-4 py-3 text-xs font-bold text-gray-700 hover:bg-gray-50 rounded-xl text-left"
+                      className="flex items-center gap-3 px-4 py-3 text-xs font-bold text-gray-700 hover:bg-gray-50 rounded-xl text-left transition-all"
                     >
                       <Calendar size={16} className="text-blue-500" /> Haftayı
                       Sıfırla
                     </button>
                     <button
                       onClick={handleResetGoals}
-                      className="flex items-center gap-3 px-4 py-3 text-xs font-bold text-orange-600 hover:bg-orange-50 rounded-xl text-left"
+                      className="flex items-center gap-3 px-4 py-3 text-xs font-bold text-gray-700 hover:bg-gray-50 rounded-xl text-left transition-all"
                     >
-                      <Medal size={16} className="text-orange-500" /> Golleri
+                      <Target size={16} className="text-orange-500" /> Golleri
                       Sıfırla
+                    </button>
+                    <button
+                      onClick={handleResetAllStats}
+                      className="flex items-center gap-3 px-4 py-3 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl text-left border-t border-gray-50 transition-all"
+                    >
+                      <ShieldAlert size={16} className="text-red-500" />{" "}
+                      Overalları Sıfırla
                     </button>
                   </div>
                 )}
@@ -1021,7 +1062,7 @@ export default function App() {
           </div>
         </div>
         {resetStatus && (
-          <div className="bg-emerald-500 text-white text-xs font-bold text-center py-2 animate-in slide-in-from-top">
+          <div className="bg-emerald-500 text-white text-xs font-bold text-center py-2 animate-in slide-in-from-top shadow-lg">
             {resetStatus}
           </div>
         )}
@@ -1031,11 +1072,11 @@ export default function App() {
         {view === "list" && (
           <div className="space-y-4 animate-in fade-in">
             {bestDayStats && bestDayStats.count > 0 && (
-              <div className="mb-6 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2rem] p-6 text-white shadow-xl flex items-center justify-between">
+              <div className="mb-6 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2rem] p-6 text-white shadow-xl flex items-center justify-between transition-transform hover:scale-[1.01]">
                 <div>
                   <div className="flex items-center gap-2 mb-1 opacity-80">
                     <Star size={14} fill="currentColor" />{" "}
-                    <span className="text-[10px] font-bold uppercase">
+                    <span className="text-[10px] font-bold uppercase tracking-wider">
                       En Çok Katılım
                     </span>
                   </div>
@@ -1090,7 +1131,7 @@ export default function App() {
                     onClick={() => setSelectedMatchDay(d.id)}
                     className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border-2 ${
                       selectedMatchDay === d.id
-                        ? "bg-gray-900 text-white border-gray-900"
+                        ? "bg-gray-900 text-white border-gray-900 shadow-md"
                         : "bg-white text-gray-400 border-gray-200"
                     }`}
                   >
@@ -1121,6 +1162,7 @@ export default function App() {
         {view === "rank" && <Leaderboard players={players} />}
       </div>
 
+      {/* Navigasyon */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-xl border border-gray-200 rounded-full shadow-2xl p-1.5 flex gap-1 z-40">
         <button
           onClick={() => setView("list")}
@@ -1157,29 +1199,31 @@ export default function App() {
         </button>
       </div>
 
-      {/* Modals */}
+      {/* Modallar */}
       {confirmModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/60 backdrop-blur-md p-6">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 text-center shadow-2xl">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 text-center shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
               <ShieldAlert size={32} />
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">
               {confirmModal.title}
             </h3>
-            <p className="text-gray-500 text-sm mb-8">{confirmModal.desc}</p>
+            <p className="text-gray-500 text-sm mb-8 leading-relaxed">
+              {confirmModal.desc}
+            </p>
             <div className="flex flex-col gap-3">
               <button
                 onClick={confirmModal.action}
-                className="w-full bg-red-600 text-white py-4 rounded-2xl font-bold text-sm"
+                className="w-full bg-red-600 text-white py-4 rounded-2xl font-bold text-sm shadow-xl shadow-red-500/20 hover:bg-red-700 transition-all uppercase tracking-wide"
               >
-                EVET, EMİNİM
+                Evet, Onaylıyorum
               </button>
               <button
                 onClick={() => setConfirmModal(null)}
-                className="w-full bg-gray-100 text-gray-600 py-4 rounded-2xl font-bold text-sm"
+                className="w-full bg-gray-100 text-gray-600 py-4 rounded-2xl font-bold text-sm transition-all hover:bg-gray-200 uppercase tracking-wide"
               >
-                VAZGEÇ
+                Vazgeç
               </button>
             </div>
           </div>
