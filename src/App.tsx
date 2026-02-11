@@ -61,6 +61,12 @@ interface Teams {
   day: string;
 }
 
+interface Day {
+  id: string;
+  label: string;
+  full: string;
+}
+
 // --- Firebase Configuration ---
 const firebaseConfig = {
   apiKey: "AIzaSyAkZU7zgEgrWlac1CaXQywAR4kQOLbMuIQ",
@@ -94,7 +100,7 @@ const PREDEFINED_PLAYERS = [
   "Necmettin",
 ];
 
-const DAYS = [
+const DAYS: Day[] = [
   { id: "Pzt", label: "Pzt", full: "Pazartesi" },
   { id: "Sal", label: "Sal", full: "Salı" },
   { id: "Çar", label: "Çar", full: "Çarşamba" },
@@ -254,6 +260,7 @@ const AppleSlider = ({
   </div>
 );
 
+// PlayerCard Props düzeltildi: currentIdentity kaldırıldı
 const PlayerCard = ({
   player,
   isSelf,
@@ -643,6 +650,29 @@ export default function App() {
     return () => unsub();
   }, [user]);
 
+  // EN İYİ GÜN HESAPLAMA (useMemo ile) - Bu sıralama hatasını çözer
+  const bestDayStats = useMemo(() => {
+    if (players.length === 0) return null;
+    let counts: Record<string, number> = {};
+    DAYS.forEach((d) => (counts[d.id] = 0));
+    players.forEach((p) => {
+      if (p.availableDays) {
+        p.availableDays.forEach((day) => {
+          if (counts[day] !== undefined) counts[day]++;
+        });
+      }
+    });
+    let maxDay = null;
+    let maxCount = -1;
+    DAYS.forEach((d) => {
+      if (counts[d.id] > maxCount) {
+        maxCount = counts[d.id];
+        maxDay = d;
+      }
+    });
+    return { day: maxDay, count: maxCount };
+  }, [players]);
+
   // Weekly Reset
   useEffect(() => {
     const checkReset = async () => {
@@ -693,6 +723,13 @@ export default function App() {
     };
     checkReset();
   }, [user, players.length > 0]);
+
+  // Set default match day
+  useEffect(() => {
+    if (bestDayStats && !selectedMatchDay && bestDayStats.day) {
+      setSelectedMatchDay(bestDayStats.day.id);
+    }
+  }, [bestDayStats, selectedMatchDay]);
 
   // Handlers
   const openEditModal = (player: Player) => {
@@ -810,7 +847,8 @@ export default function App() {
 
   const handleGenerateTeams = () => {
     const targetDay =
-      selectedMatchDay || (bestDayStats ? bestDayStats.day.id : "Pzt");
+      selectedMatchDay ||
+      (bestDayStats && bestDayStats.day ? bestDayStats.day.id : "Pzt");
     const pool = players.filter(
       (p) => p.availableDays && p.availableDays.includes(targetDay)
     );
@@ -974,7 +1012,7 @@ export default function App() {
                   EN UYGUN GÜN
                 </span>
               </div>
-              <h2 className="text-2xl font-bold">{bestDayStats.day.full}</h2>
+              <h2 className="text-2xl font-bold">{bestDayStats.day?.full}</h2>
             </div>
             <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-center min-w-[80px]">
               <span className="block text-2xl font-bold">
@@ -1007,9 +1045,10 @@ export default function App() {
                   <PlayerCard
                     key={player.id}
                     player={player}
-                    isSelf={player.id === currentIdentity.id}
+                    isSelf={
+                      currentIdentity ? player.id === currentIdentity.id : false
+                    }
                     isAdmin={isAdmin}
-                    currentIdentity={currentIdentity}
                     onEdit={() => openEditModal(player)}
                     onToggleDay={handleToggleDay}
                     onDelete={handleDeletePlayer}
